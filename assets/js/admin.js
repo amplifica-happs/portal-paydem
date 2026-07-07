@@ -122,7 +122,8 @@
       '<td>' + Util.escapeHtml(n.id_nota) + '</td>' +
       '<td>' + Util.escapeHtml(n.seller_nombre || n.seller) + '</td>' +
       '<td>' + Util.escapeHtml(n.periodo || '') + '</td>' +
-      '<td><span class="badge badge-ui">' + Util.escapeHtml(n.estado) + '</span></td>' +
+      '<td><span class="badge badge-ui">' + Util.escapeHtml(n.estado) + '</span>' +
+      (n.origen === 'legacy' ? ' <span class="badge badge-warning">LEGACY</span>' : '') + '</td>' +
       '<td>' + Util.formatCLP((n.casos || []).reduce((s, c) => s + (Number(c.monto) || 0), 0)) + '</td>' +
       '</tr>'
     ).join('');
@@ -147,7 +148,8 @@
       const montoTotal = (nota.casos || []).reduce((s, c) => s + (Number(c.monto) || 0), 0);
       const html =
         '<div class="col" style="gap:14px;">' +
-        '<div><span class="badge badge-ui">' + Util.escapeHtml(nota.estado) + '</span></div>' +
+        '<div><span class="badge badge-ui">' + Util.escapeHtml(nota.estado) + '</span>' +
+        (nota.origen === 'legacy' ? ' <span class="badge badge-warning">LEGACY — importada del sistema anterior</span>' : '') + '</div>' +
         '<div><div class="field-label">Seller</div>' + Util.escapeHtml(nota.seller_nombre || nota.seller) + '</div>' +
         '<div><div class="field-label">Período</div>' + Util.escapeHtml(nota.periodo || '') + '</div>' +
         '<div><div class="field-label">Monto Total</div>' + Util.formatCLP(montoTotal) + '</div>' +

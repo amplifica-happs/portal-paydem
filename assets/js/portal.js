@@ -113,6 +113,7 @@
         '    <div style="font-size:18px;font-weight:700;">' + nota.montoTotalFormateado + '</div>' +
         '  </div>' +
         '  <span class="badge badge-ui">' + Util.escapeHtml(nota.estado) + '</span>' +
+        (nota.origen === 'legacy' ? ' <span class="badge badge-warning">LEGACY</span>' : '') +
         '</div>' +
         '<div class="historial-detalle hidden">' +
         '  <div class="table-wrap" style="margin:12px 0;">' +
@@ -123,7 +124,7 @@
         '    <button class="btn btn-ghost btn-sm btn-ver-original">Ver original</button>' +
         (nota.firmada ? '    <button class="btn btn-ghost btn-sm btn-ver-firmado">Ver firmado</button>' : '') +
         '  </div>' +
-        (!nota.firmada ?
+        (!nota.firmada && nota.origen !== 'legacy' ?
           '  <div style="margin-top:12px;">' +
           '    <input type="file" class="input input-firma-historial" accept="application/pdf,image/jpeg,image/png">' +
           '    <button class="btn btn-primary btn-sm btn-subir-firma-historial" style="margin-top:8px;">Subir firma</button>' +
