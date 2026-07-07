@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Amplifica — Panel Admin Indemnizaciones</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="assets/css/amplifica-core.css">
+<link rel="stylesheet" href="assets/css/admin.css">
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+<body>
+
+<header class="amp-navbar">
+  <img class="nav-logo light-only" src="https://app.amplifica.io/img/logo_largo.png" alt="Amplifica">
+  <img class="nav-logo dark-only" src="https://cdn.prod.website-files.com/610096e9692dfe06770b0d75/633708bd759d50990cb579b7_logo_footer-p-500.png" alt="Amplifica">
+  <div class="nav-divider"></div>
+  <span class="nav-tag">Panel Admin — Indemnizaciones</span>
+  <div class="nav-spacer"></div>
+  <span class="text-muted hidden" id="admin-email-actual" style="font-size:13px;margin-right:4px;"></span>
+  <button class="btn btn-ghost btn-sm hidden" id="btn-logout">Cerrar sesión</button>
+  <button class="btn btn-icon btn-ghost" onclick="Amp.toggleTheme()" aria-label="Cambiar tema">
+    <span class="material-symbols-rounded" id="amp-theme-icon">light_mode</span>
+  </button>
+</header>
+
+<!-- ── view-admin-gate ────────────────────────────────────── -->
+<main id="view-admin-gate" class="container" style="max-width:420px;">
+  <div class="card" style="text-align:center;">
+    <h3 style="margin-bottom:8px;">Acceso Admin</h3>
+    <p class="text-muted" style="margin-bottom:20px;">Inicia sesión con tu cuenta de Amplifica.</p>
+    <div id="google-signin-button" style="display:flex;justify-content:center;"></div>
+    <div id="admin-gate-error" class="alert alert-danger hidden" style="margin-top:16px;text-align:left;"></div>
+  </div>
+</main>
+
+<!-- ── view-admin-shell ───────────────────────────────────── -->
+<main id="view-admin-shell" class="container hidden">
+
+  <div class="btn-group" style="margin-bottom:24px;">
+    <button class="btn dash-tab is-active" data-tab="tab-listado">Listado</button>
+    <button class="btn dash-tab" data-tab="tab-generar">Generar Notas</button>
+    <button class="btn dash-tab" data-tab="tab-auditoria">Auditoría</button>
+    <button class="btn dash-tab" data-tab="tab-pagos">Pagos</button>
+  </div>
+
+  <!-- Tab: Listado -->
+  <section id="tab-listado" class="tab-section">
+    <div class="row" style="margin-bottom:16px;justify-content:space-between;">
+      <div class="row">
+        <select id="select-anio" class="select" style="width:120px;"></select>
+        <input type="text" id="input-filtro-listado" class="input" placeholder="Buscar seller o N° Nota..." style="width:260px;">
+      </div>
+      <button class="btn btn-ghost btn-sm" id="btn-refrescar-listado">
+        <span class="material-symbols-rounded">refresh</span> Refrescar
+      </button>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>N° Nota</th><th>Seller</th><th>Período</th><th>Estado</th><th>Monto</th></tr></thead>
+        <tbody id="listado-body"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- Tab: Generar Notas -->
+  <section id="tab-generar" class="tab-section hidden">
+    <div class="row" style="justify-content:space-between;margin-bottom:16px;">
+      <h3>Vista previa de generación</h3>
+      <label class="toggle">
+        <input type="checkbox" id="toggle-modo-prueba">
+        <span class="toggle-track"></span>
+        Modo Prueba
+      </label>
+    </div>
+    <div id="alerta-modo-prueba" class="alert alert-warning hidden" style="margin-bottom:16px;">
+      Genera Notas de prueba enviadas solo a hectoralayninostroza@gmail.com, sin tocar datos reales.
+    </div>
+    <div id="generar-cards" class="col" style="gap:16px;"></div>
+    <div class="row" style="justify-content:flex-end;margin-top:20px;gap:8px;">
+      <button class="btn btn-ghost" id="btn-refrescar-preview">Refrescar preview</button>
+      <button class="btn btn-primary" id="btn-confirmar-generacion">Confirmar generación</button>
+    </div>
+    <div id="generar-progreso" class="card hidden" style="margin-top:20px;">
+      <div class="progress is-indeterminate"><div class="progress-bar"></div></div>
+      <p style="margin-top:12px;" class="text-muted">Generando Notas, esto puede tardar unos minutos…</p>
+    </div>
+    <div id="generar-resultado" class="col hidden" style="margin-top:20px;gap:8px;"></div>
+  </section>
+
+  <!-- Tab: Auditoría -->
+  <section id="tab-auditoria" class="tab-section hidden">
+    <h3 style="margin-bottom:16px;">Casos bloqueados — datos incompletos</h3>
+    <div class="table-wrap" style="margin-bottom:24px;">
+      <table class="table">
+        <thead><tr><th>Fila</th><th>Seller</th><th>ID Pedido</th><th>Motivo</th><th></th></tr></thead>
+        <tbody id="auditoria-bloqueado-body"></tbody>
+      </table>
+    </div>
+
+    <details style="margin-bottom:12px;">
+      <summary class="btn btn-ghost btn-sm" style="display:inline-flex;">Pendientes de aprobación (<span id="count-pendiente">0</span>)</summary>
+      <div class="table-wrap" style="margin-top:12px;">
+        <table class="table"><thead><tr><th>Fila</th><th>Seller</th><th>ID Pedido</th><th>Estado</th></tr></thead>
+        <tbody id="auditoria-pendiente-body"></tbody></table>
+      </div>
+    </details>
+
+    <details>
+      <summary class="btn btn-ghost btn-sm" style="display:inline-flex;">Ya procesados (<span id="count-procesado">0</span>)</summary>
+      <div class="table-wrap" style="margin-top:12px;">
+        <table class="table"><thead><tr><th>Fila</th><th>Seller</th><th>ID Pedido</th></tr></thead>
+        <tbody id="auditoria-procesado-body"></tbody></table>
+      </div>
+    </details>
+  </section>
+
+  <!-- Tab: Pagos -->
+  <section id="tab-pagos" class="tab-section hidden">
+    <div class="card" style="margin-bottom:20px;">
+      <h4 style="margin-bottom:8px;">1. Exportar pendientes de pago</h4>
+      <p class="text-muted" style="margin-bottom:12px;">Notas firmadas sin fecha de pago programada aún.</p>
+      <button class="btn btn-primary" id="btn-exportar-pagos">
+        <span class="material-symbols-rounded">download</span> Exportar CSV
+      </button>
+    </div>
+    <div class="card">
+      <h4 style="margin-bottom:8px;">2. Importar fechas de pago</h4>
+      <p class="text-muted" style="margin-bottom:12px;">Sube el mismo CSV con la columna "Fecha Programada" completa (formato AAAA-MM-DD).</p>
+      <input type="file" id="input-csv-pagos" class="input" accept=".csv">
+      <button class="btn btn-primary" id="btn-importar-pagos" style="margin-top:12px;">Importar</button>
+    </div>
+  </section>
+
+</main>
+
+<!-- ── Chrome compartido ─────────────────────────────────── -->
+<div id="amp-panel-backdrop" class="amp-panel-backdrop" onclick="Amp.closeSidePanel()"></div>
+<div id="amp-panel" class="amp-panel">
+  <div class="amp-panel-head">
+    <h3 id="amp-panel-title">Detalles</h3>
+    <button class="amp-panel-close" onclick="Amp.closeSidePanel()">✕</button>
+  </div>
+  <div id="amp-panel-body" class="amp-panel-body"></div>
+</div>
+
+<div id="doc-viewer-backdrop" class="amp-panel-backdrop" onclick="Amp.closeDocViewer()"></div>
+<div id="doc-viewer" class="amp-panel">
+  <div class="amp-panel-head">
+    <div>
+      <div class="eyebrow">Previsualización</div>
+      <h3 id="doc-viewer-label" style="font-size:16px;"></h3>
+    </div>
+    <div class="amp-panel-head-actions">
+      <button id="doc-viewer-download" class="btn btn-ghost btn-sm">Descargar</button>
+      <button id="doc-viewer-newtab" class="btn btn-ghost btn-sm">Nueva pestaña</button>
+      <button class="amp-panel-close" onclick="Amp.closeDocViewer()">✕</button>
+    </div>
+  </div>
+  <div id="doc-viewer-body"></div>
+</div>
+
+<script src="assets/js/amplifica-core.js"></script>
+<script src="assets/js/config.js"></script>
+<script src="assets/js/util.js"></script>
+<script src="assets/js/api.js"></script>
+<script src="assets/js/admin.js"></script>
+</body>
+</html>

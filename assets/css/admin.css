@@ -1,0 +1,9 @@
+.hidden { display: none !important; }
+
+.dash-tab { border-radius: 0; }
+.dash-tab:first-child { border-top-left-radius: var(--r-2); border-bottom-left-radius: var(--r-2); }
+.dash-tab:last-child { border-top-right-radius: var(--r-2); border-bottom-right-radius: var(--r-2); }
+.dash-tab.is-active { background: var(--ui); color: var(--ui-fg); border-color: var(--ui); }
+
+.seller-card .card-head { align-items: flex-start; }
+.seller-card.is-deselected { opacity: 0.5; }
