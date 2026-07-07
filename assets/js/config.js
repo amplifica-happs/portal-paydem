@@ -3,7 +3,7 @@
  * URL /exec del Web App de Apps Script una vez desplegado (ver backend/README.md).
  */
 const CONFIG = {
-  BACKEND_URL: 'https://script.google.com/macros/s/REEMPLAZAR_CON_TU_DEPLOYMENT_ID/exec',
+  BACKEND_URL: 'https://script.google.com/macros/s/AKfycbwc8SBwwrWql_mVPkhXAx18VNubGh-0p6Mb3blhBZ7ZxHKE7SROIuqtKU0ggyV61MaY/exec',
 
   // Client ID de Google Sign-In (admin.html) — no es secreto, está pensado para ir acá.
   // Debe ser EXACTAMENTE el mismo valor que Config.gs -> GOOGLE_OAUTH_CLIENT_ID en el backend.
