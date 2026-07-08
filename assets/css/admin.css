@@ -7,3 +7,5 @@
 
 .seller-card .card-head { align-items: flex-start; }
 .seller-card.is-deselected { opacity: 0.5; }
+
+.fila-nota { cursor: pointer; }
