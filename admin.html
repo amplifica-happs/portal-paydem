@@ -42,6 +42,7 @@
     <button class="btn dash-tab" data-tab="tab-generar">Generar Notas</button>
     <button class="btn dash-tab" data-tab="tab-auditoria">Auditoría</button>
     <button class="btn dash-tab" data-tab="tab-pagos">Pagos</button>
+    <button class="btn dash-tab" data-tab="tab-herramientas">Herramientas</button>
   </div>
 
   <!-- Tab: Listado -->
@@ -129,6 +130,33 @@
       <p class="text-muted" style="margin-bottom:12px;">Sube el mismo CSV con la columna "Fecha Programada" completa (formato AAAA-MM-DD).</p>
       <input type="file" id="input-csv-pagos" class="input" accept=".csv">
       <button class="btn btn-primary" id="btn-importar-pagos" style="margin-top:12px;">Importar</button>
+    </div>
+  </section>
+
+  <!-- Tab: Herramientas -->
+  <section id="tab-herramientas" class="tab-section hidden">
+    <div class="card" style="margin-bottom:20px;">
+      <h4 style="margin-bottom:8px;">Reconstruir índice</h4>
+      <p class="text-muted" style="margin-bottom:12px;">
+        Reescribe el índice del año elegido desde los archivos de cada seller (fuente de verdad).
+        Operación de solo lectura sobre esos archivos — segura de correr las veces que quieras.
+      </p>
+      <div class="row">
+        <select id="select-anio-reconstruir" class="select" style="width:120px;"></select>
+        <button class="btn btn-primary" id="btn-reconstruir-indice">Reconstruir índice</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h4 style="margin-bottom:8px;">Migrar Notas legacy y reorganizar carpetas</h4>
+      <p class="text-muted" style="margin-bottom:12px;">
+        Mueve las carpetas de año sueltas bajo la raíz de Drive hacia <code>Notas/</code>, detecta PDFs
+        del sistema anterior sueltos en cada carpeta de seller, los mueve a <code>Generadas/</code>, y les
+        crea un registro histórico (marcado como "LEGACY") reconstruyendo el detalle desde "Extraviados 2026".
+        Mueve archivos y carpetas reales — pide confirmación antes de ejecutar. Es seguro correrla más de una vez.
+      </p>
+      <button class="btn btn-danger" id="btn-migrar-legacy">Migrar Notas legacy</button>
+      <div id="migrar-legacy-log" class="terminal hidden" style="margin-top:16px;"></div>
     </div>
   </section>
 

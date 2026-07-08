@@ -94,8 +94,8 @@
   });
 
   // ── Tab: Listado ──────────────────────────────────────────
-  function poblarSelectAnio() {
-    const sel = document.getElementById('select-anio');
+  function poblarSelectAnio(id) {
+    const sel = document.getElementById(id);
     const actual = new Date().getFullYear();
     sel.innerHTML = '';
     for (let a = actual; a >= actual - 3; a--) {
@@ -104,7 +104,8 @@
       sel.appendChild(opt);
     }
   }
-  poblarSelectAnio();
+  poblarSelectAnio('select-anio-reconstruir');
+  poblarSelectAnio('select-anio');
 
   let notasListado = [];
   function cargarListado() {
@@ -323,6 +324,46 @@
         if (res.ok) Amp.showToast(res.data.aplicadas + ' fila(s) aplicadas', 'success');
         else Amp.showToast('No se pudo importar', 'danger');
       });
+  });
+
+  // ── Tab: Herramientas ─────────────────────────────────────
+  document.getElementById('btn-reconstruir-indice').addEventListener('click', () => {
+    const anio = document.getElementById('select-anio-reconstruir').value;
+    const btn = document.getElementById('btn-reconstruir-indice');
+    Amp.setButtonLoading(btn, true);
+    Api.post('reconstruirIndiceAdmin', { anio: anio, sesionAdmin: getSesion() }).then(res => {
+      Amp.setButtonLoading(btn, false);
+      if (res.ok) {
+        Amp.showToast('Índice ' + anio + ' reconstruido — ' + res.data.total + ' Nota(s)', 'success');
+        tabsCargados['tab-listado'] = false; // forzar recarga la próxima vez que se visite
+      } else {
+        Amp.showToast('No se pudo reconstruir el índice', 'danger');
+      }
+    });
+  });
+
+  document.getElementById('btn-migrar-legacy').addEventListener('click', () => {
+    const confirmado = window.confirm(
+      'Esto va a mover carpetas y archivos reales en Drive (carpetas de año hacia Notas/, ' +
+      'PDFs legacy sueltos hacia Generadas/) y crear registros históricos marcados como LEGACY. ' +
+      'Es seguro correrlo más de una vez. ¿Continuar?'
+    );
+    if (!confirmado) return;
+
+    const btn = document.getElementById('btn-migrar-legacy');
+    const logBox = document.getElementById('migrar-legacy-log');
+    Amp.setButtonLoading(btn, true);
+    logBox.classList.add('hidden');
+
+    Api.post('migrarLegacyAdmin', { sesionAdmin: getSesion() }).then(res => {
+      Amp.setButtonLoading(btn, false);
+      if (!res.ok) { Amp.showToast('No se pudo migrar', 'danger'); return; }
+
+      logBox.classList.remove('hidden');
+      logBox.innerHTML = res.data.log.map(linea => '<span class="terminal-line">' + Util.escapeHtml(linea) + '</span>').join('');
+      Amp.showToast(res.data.totalMigradas + ' Nota(s) legacy migrada(s)', 'success');
+      tabsCargados['tab-listado'] = false;
+    });
   });
 
   // ── Boot ──────────────────────────────────────────────────
