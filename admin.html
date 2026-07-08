@@ -156,6 +156,14 @@
         Mueve archivos y carpetas reales — pide confirmación antes de ejecutar. Es seguro correrla más de una vez.
       </p>
       <button class="btn btn-danger" id="btn-migrar-legacy">Migrar Notas legacy</button>
+
+      <div id="migrar-legacy-progreso" class="progress-block hidden" style="margin-top:16px;">
+        <div class="progress"><div class="progress-bar" id="migrar-legacy-progress-bar" style="width:0%;"></div></div>
+        <div class="progress-block-meta">
+          <span id="migrar-legacy-progress-texto">0 / 0 sellers</span>
+        </div>
+      </div>
+
       <div id="migrar-legacy-log" class="terminal hidden" style="margin-top:16px;"></div>
     </div>
   </section>

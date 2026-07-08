@@ -179,18 +179,30 @@
   // (github/index.html, líneas ~890-950 y ~3798-3852): mismo mecanismo de slide-in
   // + base64-a-Blob + iframe, restyled con los tokens de este archivo, y con una
   // rama nueva para imágenes (el original solo tenía <iframe>).
-  function openDocViewer({ label = '', mimeType = 'application/pdf', base64, fileName = 'documento' }) {
+  /**
+   * Abre el panel INMEDIATAMENTE con spinner, antes de pedir el documento al backend.
+   * Separado de renderDocViewerContent() a propósito: el "silencio" entre el click y
+   * que el panel aparezca (mientras el fetch de descargarArchivo está en vuelo) es lo
+   * que hacía sentir lento el visor — abrir de una vez con el spinner no acelera la
+   * descarga real, pero elimina esa sensación de que "no pasó nada" al hacer click.
+   */
+  function openDocViewerLoading(label) {
     const backdrop = document.getElementById('doc-viewer-backdrop');
     const panel    = document.getElementById('doc-viewer');
     const body     = document.getElementById('doc-viewer-body');
     const labelEl  = document.getElementById('doc-viewer-label');
-    const dlBtn    = document.getElementById('doc-viewer-download');
-    const tabBtn   = document.getElementById('doc-viewer-newtab');
 
-    labelEl.textContent = label;
+    labelEl.textContent = label || '';
     body.innerHTML = '<div class="row" style="justify-content:center;padding:40px;"><span class="amp-spinner lg"></span></div>';
     backdrop.classList.add('is-open');
     panel.classList.add('is-open');
+  }
+
+  function renderDocViewerContent({ mimeType = 'application/pdf', base64, fileName = 'documento' }) {
+    const panel  = document.getElementById('doc-viewer');
+    const body   = document.getElementById('doc-viewer-body');
+    const dlBtn  = document.getElementById('doc-viewer-download');
+    const tabBtn = document.getElementById('doc-viewer-newtab');
 
     const binary = atob(base64);
     const bytes = new Uint8Array(binary.length);
@@ -213,6 +225,13 @@
 
     panel._objectUrl = url;
   }
+
+  /** Muestra un error dentro del propio panel (ya está abierto) en vez de cerrarlo en silencio. */
+  function showDocViewerError(msg) {
+    document.getElementById('doc-viewer-body').innerHTML =
+      '<div class="alert alert-danger" style="margin:20px;">' + msg + '</div>';
+  }
+
   function closeDocViewer() {
     const panel = document.getElementById('doc-viewer');
     document.getElementById('doc-viewer-backdrop').classList.remove('is-open');
@@ -229,6 +248,6 @@
     animateCounter,
     showInputModal,
     openSidePanel, closeSidePanel,
-    openDocViewer, closeDocViewer,
+    openDocViewerLoading, renderDocViewerContent, showDocViewerError, closeDocViewer,
   };
 })(window);

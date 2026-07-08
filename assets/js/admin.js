@@ -8,6 +8,7 @@
   const EMAIL_KEY = 'amp_sesionAdminEmail';
   let preview = null; // último previsualizarNotas, con selección en memoria
   const tabsCargados = {};
+  const cacheDocumentos = {}; // key: seller|idNota|cual -> {mimeType, base64, nombreArchivo} — inmutables, no expiran en la sesión
 
   function getSesion() { return sessionStorage.getItem(SESSION_KEY); }
   function setSesion(v) { sessionStorage.setItem(SESSION_KEY, v); }
@@ -186,12 +187,20 @@
   }
 
   function verArchivoAdmin(cual, seller, idNota) {
+    const label = (cual === 'firmado' ? 'Documento firmado' : 'Nota de Cobro') + ' — ' + idNota;
+    Amp.openDocViewerLoading(label);
+
+    const claveCache = seller + '|' + idNota + '|' + cual;
+    if (cacheDocumentos[claveCache]) {
+      Amp.renderDocViewerContent(cacheDocumentos[claveCache]);
+      return;
+    }
+
     Api.get('descargarArchivo', { seller: seller, idNota: idNota, cual: cual, sesion: getSesion() }).then(res => {
-      if (!res.ok) { Amp.showToast('No se pudo cargar el documento', 'danger'); return; }
-      Amp.openDocViewer({
-        label: (cual === 'firmado' ? 'Documento firmado' : 'Nota de Cobro') + ' — ' + idNota,
-        mimeType: res.data.mimeType, base64: res.data.base64, fileName: res.data.nombreArchivo
-      });
+      if (!res.ok) { Amp.showDocViewerError(res.detalle || 'No se pudo cargar el documento'); return; }
+      const datos = { mimeType: res.data.mimeType, base64: res.data.base64, fileName: res.data.nombreArchivo };
+      cacheDocumentos[claveCache] = datos;
+      Amp.renderDocViewerContent(datos);
     });
   }
 
@@ -344,6 +353,8 @@
     });
   });
 
+  // Flujo en dos pasos (preparar + procesar un seller a la vez) — evita acercarse al
+  // límite de 6 min de Apps Script y da progreso real en vez de un spinner ciego.
   document.getElementById('btn-migrar-legacy').addEventListener('click', () => {
     const confirmado = window.confirm(
       'Esto va a mover carpetas y archivos reales en Drive (carpetas de año hacia Notas/, ' +
@@ -354,20 +365,77 @@
 
     const btn = document.getElementById('btn-migrar-legacy');
     const logBox = document.getElementById('migrar-legacy-log');
+    const progresoBox = document.getElementById('migrar-legacy-progreso');
+    const progressBar = document.getElementById('migrar-legacy-progress-bar');
+    const progressTexto = document.getElementById('migrar-legacy-progress-texto');
+
     Amp.setButtonLoading(btn, true);
     logBox.classList.add('hidden');
+    logBox.innerHTML = '';
+    progresoBox.classList.remove('hidden');
+    progressBar.style.width = '0%';
+    progressTexto.textContent = 'Preparando…';
 
-    Api.post('migrarLegacyAdmin', { sesionAdmin: getSesion() }).then(res => {
-      Amp.setButtonLoading(btn, false);
-      if (!res.ok) { Amp.showToast(res.detalle || 'No se pudo migrar', 'danger'); return; }
-
+    const agregarLog = lineas => {
       logBox.classList.remove('hidden');
-      logBox.innerHTML = res.data.log.map(linea => '<span class="terminal-line">' + Util.escapeHtml(linea) + '</span>').join('');
+      lineas.forEach(linea => {
+        const span = document.createElement('span');
+        span.className = 'terminal-line';
+        span.textContent = linea;
+        logBox.appendChild(span);
+      });
+      logBox.scrollTop = logBox.scrollHeight;
+    };
 
-      const resumen = res.data.totalMigradas + ' Nota(s) legacy migrada(s)' +
-        (res.data.totalFallidas > 0 ? ', ' + res.data.totalFallidas + ' fallida(s) — revisa el log' : '');
-      Amp.showToast(resumen, res.data.totalFallidas > 0 ? 'warning' : 'success');
-      tabsCargados['tab-listado'] = false;
+    Api.post('prepararMigracionLegacyAdmin', { sesionAdmin: getSesion() }).then(prepRes => {
+      if (!prepRes.ok) {
+        Amp.setButtonLoading(btn, false);
+        Amp.showToast(prepRes.detalle || 'No se pudo preparar la migración', 'danger');
+        return;
+      }
+      agregarLog(prepRes.data.log);
+
+      const pendientes = prepRes.data.pendientes;
+      const total = pendientes.length;
+      let procesados = 0, totalMigradas = 0, totalFallidas = 0;
+
+      if (total === 0) {
+        Amp.setButtonLoading(btn, false);
+        progressTexto.textContent = 'Nada pendiente';
+        progressBar.style.width = '100%';
+        Amp.showToast('No había Notas legacy pendientes de migrar', 'success');
+        return;
+      }
+      progressTexto.textContent = '0 / ' + total + ' sellers';
+
+      function procesarSiguiente() {
+        if (procesados >= total) {
+          Amp.setButtonLoading(btn, false);
+          const resumen = totalMigradas + ' Nota(s) legacy migrada(s)' +
+            (totalFallidas > 0 ? ', ' + totalFallidas + ' fallida(s) — revisa el log' : '');
+          Amp.showToast(resumen, totalFallidas > 0 ? 'warning' : 'success');
+          tabsCargados['tab-listado'] = false;
+          return;
+        }
+
+        const item = pendientes[procesados];
+        Api.post('migrarUnSellerLegacyAdmin', { anio: item.anio, sellerFolder: item.sellerFolder, sesionAdmin: getSesion() })
+          .then(res => {
+            if (res.ok) {
+              totalMigradas += res.data.migradas;
+              totalFallidas += res.data.fallidas;
+              agregarLog(res.data.log);
+            } else {
+              totalFallidas++;
+              agregarLog(['ERROR: ' + item.sellerFolder + ' (' + item.anio + '): ' + (res.detalle || 'falló la llamada')]);
+            }
+            procesados++;
+            progressBar.style.width = Math.round((procesados / total) * 100) + '%';
+            progressTexto.textContent = procesados + ' / ' + total + ' sellers';
+            procesarSiguiente();
+          });
+      }
+      procesarSiguiente();
     });
   });
 

@@ -4,6 +4,7 @@
  */
 (function () {
   let seller = null, token = null, sesionHistorico = null, notaActual = null;
+  const cacheDocumentos = {}; // key: seller|idNota|cual -> {mimeType, base64, nombreArchivo} — inmutables, no expiran en la sesión
 
   function showView(id) {
     document.querySelectorAll('.view').forEach(v => v.classList.add('hidden'));
@@ -63,12 +64,20 @@
   }
 
   function verArchivo(cual, sellerParam, idNota, tokenParam, sesionParam) {
+    const label = (cual === 'firmado' ? 'Documento firmado' : 'Nota de Cobro') + ' — ' + idNota;
+    Amp.openDocViewerLoading(label);
+
+    const claveCache = sellerParam + '|' + idNota + '|' + cual;
+    if (cacheDocumentos[claveCache]) {
+      Amp.renderDocViewerContent(cacheDocumentos[claveCache]);
+      return;
+    }
+
     Api.get('descargarArchivo', { seller: sellerParam, idNota: idNota, cual: cual, token: tokenParam, sesion: sesionParam }).then(res => {
-      if (!res.ok) { Amp.showToast('No se pudo cargar el documento', 'danger'); return; }
-      Amp.openDocViewer({
-        label: (cual === 'firmado' ? 'Documento firmado' : 'Nota de Cobro') + ' — ' + idNota,
-        mimeType: res.data.mimeType, base64: res.data.base64, fileName: res.data.nombreArchivo
-      });
+      if (!res.ok) { Amp.showDocViewerError(res.detalle || 'No se pudo cargar el documento'); return; }
+      const datos = { mimeType: res.data.mimeType, base64: res.data.base64, fileName: res.data.nombreArchivo };
+      cacheDocumentos[claveCache] = datos;
+      Amp.renderDocViewerContent(datos);
     });
   }
 
