@@ -252,7 +252,7 @@
       document.getElementById('btn-confirmar-generacion').disabled = false;
       const resCont = document.getElementById('generar-resultado');
       resCont.classList.remove('hidden');
-      if (!res.ok) { Amp.showToast('No se pudo generar', 'danger'); return; }
+      if (!res.ok) { Amp.showToast(res.detalle || 'No se pudo generar', 'danger'); return; }
 
       resCont.innerHTML = res.data.map(r =>
         '<div class="alert ' + (r.ok ? 'alert-success' : 'alert-danger') + '">' +
@@ -267,7 +267,9 @@
         btn.addEventListener('click', () => verArchivoAdmin('original', btn.dataset.seller, btn.dataset.idNota));
       });
 
-      Amp.showToast('Generación completada', 'success');
+      const huboFallos = res.data.some(r => !r.ok);
+      if (huboFallos) Amp.showToast('Generación completada con errores — revisa el detalle abajo', 'warning');
+      else Amp.showToast('Generación completada', 'success');
       tabsCargados['tab-listado'] = false; // forzar recarga la próxima vez que se visite
     });
   });
@@ -337,7 +339,7 @@
         Amp.showToast('Índice ' + anio + ' reconstruido — ' + res.data.total + ' Nota(s)', 'success');
         tabsCargados['tab-listado'] = false; // forzar recarga la próxima vez que se visite
       } else {
-        Amp.showToast('No se pudo reconstruir el índice', 'danger');
+        Amp.showToast(res.detalle || 'No se pudo reconstruir el índice', 'danger');
       }
     });
   });
@@ -357,11 +359,14 @@
 
     Api.post('migrarLegacyAdmin', { sesionAdmin: getSesion() }).then(res => {
       Amp.setButtonLoading(btn, false);
-      if (!res.ok) { Amp.showToast('No se pudo migrar', 'danger'); return; }
+      if (!res.ok) { Amp.showToast(res.detalle || 'No se pudo migrar', 'danger'); return; }
 
       logBox.classList.remove('hidden');
       logBox.innerHTML = res.data.log.map(linea => '<span class="terminal-line">' + Util.escapeHtml(linea) + '</span>').join('');
-      Amp.showToast(res.data.totalMigradas + ' Nota(s) legacy migrada(s)', 'success');
+
+      const resumen = res.data.totalMigradas + ' Nota(s) legacy migrada(s)' +
+        (res.data.totalFallidas > 0 ? ', ' + res.data.totalFallidas + ' fallida(s) — revisa el log' : '');
+      Amp.showToast(resumen, res.data.totalFallidas > 0 ? 'warning' : 'success');
       tabsCargados['tab-listado'] = false;
     });
   });
