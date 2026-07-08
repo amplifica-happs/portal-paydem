@@ -51,6 +51,12 @@
       '</td><td>' + Util.escapeHtml(c.responsable || '') + '</td></tr>'
     ).join('');
 
+    // Colapsado por default — evita el scroll largo al abrir el link mágico.
+    document.getElementById('nota-casos-wrap').classList.add('hidden');
+    const btnToggleCasos = document.getElementById('btn-toggle-detalle-casos');
+    btnToggleCasos.querySelector('.material-symbols-rounded').textContent = 'expand_more';
+    btnToggleCasos.lastChild.textContent = ' Ver detalle de pedidos';
+
     const pendiente = document.getElementById('nota-firma-pendiente');
     const firmada = document.getElementById('nota-firmada');
     if (nota.firmada) {
@@ -164,6 +170,15 @@
   }
 
   // ── Wiring ──────────────────────────────────────────────
+  document.getElementById('btn-toggle-detalle-casos').addEventListener('click', () => {
+    const wrap = document.getElementById('nota-casos-wrap');
+    const btn = document.getElementById('btn-toggle-detalle-casos');
+    const expandido = wrap.classList.contains('hidden'); // va a quedar así tras el toggle
+    wrap.classList.toggle('hidden');
+    btn.querySelector('.material-symbols-rounded').textContent = expandido ? 'expand_less' : 'expand_more';
+    btn.lastChild.textContent = expandido ? ' Ocultar detalle de pedidos' : ' Ver detalle de pedidos';
+  });
+
   document.getElementById('btn-ver-original').addEventListener('click', () =>
     verArchivo('original', seller, notaActual.id_nota, token, sesionHistorico));
 

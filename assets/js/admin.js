@@ -109,14 +109,67 @@
   poblarSelectAnio('select-anio');
 
   let notasListado = [];
+  const listadoFiltros = { sellers: [], estados: [] };
+  let listadoPagina = 1;
+  let listadoPageSize = 20;
+  let msSellersListado = null;
+  let msEstadosListado = null;
+
   function cargarListado() {
     const anio = document.getElementById('select-anio').value || new Date().getFullYear();
     Api.get('listarNotas', { anio: anio, sesionAdmin: getSesion() }).then(res => {
       if (!res.ok) { Amp.showToast('No se pudo cargar el listado', 'danger'); return; }
       notasListado = res.data.sort((a, b) => (b.id_nota || '').localeCompare(a.id_nota || ''));
-      renderListado(notasListado);
+      actualizarOpcionesFiltrosListado();
+      listadoPagina = 1;
+      aplicarFiltrosListado();
     });
   }
+
+  function actualizarOpcionesFiltrosListado() {
+    const sellersUnicos = Array.from(new Set(notasListado.map(n => n.seller_nombre || n.seller))).sort();
+    const estadosUnicos = Array.from(new Set(notasListado.map(n => n.estado).filter(Boolean))).sort();
+    if (!msSellersListado) {
+      msSellersListado = Amp.multiSelect(document.getElementById('filtro-sellers-listado'), {
+        label: 'Sellers',
+        options: sellersUnicos.map(s => ({ value: s, label: s })),
+        onChange: sel => { listadoFiltros.sellers = sel; listadoPagina = 1; aplicarFiltrosListado(); }
+      });
+      msEstadosListado = Amp.multiSelect(document.getElementById('filtro-estados-listado'), {
+        label: 'Estado',
+        options: estadosUnicos.map(e => ({ value: e, label: e })),
+        onChange: sel => { listadoFiltros.estados = sel; listadoPagina = 1; aplicarFiltrosListado(); }
+      });
+    } else {
+      msSellersListado.setOptions(sellersUnicos.map(s => ({ value: s, label: s })));
+      msEstadosListado.setOptions(estadosUnicos.map(e => ({ value: e, label: e })));
+    }
+  }
+
+  function aplicarFiltrosListado() {
+    const q = document.getElementById('input-filtro-listado').value.toLowerCase();
+    const sellersSet = new Set(listadoFiltros.sellers);
+    const estadosSet = new Set(listadoFiltros.estados);
+    const filtradas = notasListado.filter(n => {
+      const nombreSeller = n.seller_nombre || n.seller || '';
+      if (q && nombreSeller.toLowerCase().indexOf(q) === -1 && (n.id_nota || '').toLowerCase().indexOf(q) === -1) return false;
+      if (sellersSet.size > 0 && !sellersSet.has(nombreSeller)) return false;
+      if (estadosSet.size > 0 && !estadosSet.has(n.estado)) return false;
+      return true;
+    });
+
+    const totalPaginas = Math.max(1, Math.ceil(filtradas.length / listadoPageSize));
+    listadoPagina = Math.min(listadoPagina, totalPaginas);
+    const desde = (listadoPagina - 1) * listadoPageSize;
+    renderListado(filtradas.slice(desde, desde + listadoPageSize));
+
+    Amp.renderPagination(document.getElementById('listado-paginacion'), {
+      page: listadoPagina, pageSize: listadoPageSize, total: filtradas.length,
+      onPageChange: p => { listadoPagina = p; aplicarFiltrosListado(); },
+      onPageSizeChange: n => { listadoPageSize = n; listadoPagina = 1; aplicarFiltrosListado(); }
+    });
+  }
+
   function renderListado(notas) {
     const tbody = document.getElementById('listado-body');
     tbody.innerHTML = notas.map(n =>
@@ -128,61 +181,88 @@
       (n.origen === 'legacy' ? ' <span class="badge badge-warning">LEGACY</span>' : '') + '</td>' +
       '<td>' + Util.formatCLP((n.casos || []).reduce((s, c) => s + (Number(c.monto) || 0), 0)) + '</td>' +
       '</tr>'
-    ).join('');
+    ).join('') || '<tr><td colspan="5" class="text-muted" style="text-align:center;padding:24px;">Sin resultados para estos filtros</td></tr>';
     tbody.querySelectorAll('.fila-nota').forEach(tr => {
       tr.addEventListener('click', () => abrirDetalleNota(tr.dataset.seller, tr.dataset.idNota));
     });
   }
   document.getElementById('select-anio').addEventListener('change', cargarListado);
   document.getElementById('btn-refrescar-listado').addEventListener('click', cargarListado);
-  document.getElementById('input-filtro-listado').addEventListener('input', Util.debounce(e => {
-    const q = e.target.value.toLowerCase();
-    renderListado(notasListado.filter(n =>
-      (n.seller_nombre || n.seller || '').toLowerCase().indexOf(q) !== -1 ||
-      (n.id_nota || '').toLowerCase().indexOf(q) !== -1
-    ));
+  document.getElementById('input-filtro-listado').addEventListener('input', Util.debounce(() => {
+    listadoPagina = 1;
+    aplicarFiltrosListado();
   }, 200));
 
-  function abrirDetalleNota(seller, idNota) {
-    Api.get('getNotaVerificada', { seller: seller, idNota: idNota, sesionAdmin: getSesion() }).then(res => {
-      if (!res.ok) { Amp.showToast('No se pudo cargar la Nota', 'danger'); return; }
-      const nota = res.data;
-      const montoTotal = (nota.casos || []).reduce((s, c) => s + (Number(c.monto) || 0), 0);
-      const html =
-        '<div class="col" style="gap:14px;">' +
-        '<div><span class="badge badge-ui">' + Util.escapeHtml(nota.estado) + '</span>' +
-        (nota.origen === 'legacy' ? ' <span class="badge badge-warning">LEGACY — importada del sistema anterior</span>' : '') + '</div>' +
-        '<div><div class="field-label">Seller</div>' + Util.escapeHtml(nota.seller_nombre || nota.seller) + '</div>' +
-        '<div><div class="field-label">Período</div>' + Util.escapeHtml(nota.periodo || '') + '</div>' +
-        '<div><div class="field-label">Monto Total</div>' + Util.formatCLP(montoTotal) + '</div>' +
-        '<div><div class="field-label">Fecha generada</div>' + Util.escapeHtml(nota.fecha_generada || '') + '</div>' +
-        '<div><div class="field-label">Fecha firma</div>' + Util.escapeHtml(nota.fecha_firma || '—') + '</div>' +
-        '<div class="table-wrap"><table class="table"><thead><tr><th>ID Pedido</th><th>Monto</th></tr></thead><tbody>' +
-        (nota.casos || []).map(c => '<tr><td>' + Util.escapeHtml(c.id_pedido) + '</td><td>' + Util.formatCLP(c.monto) + '</td></tr>').join('') +
-        '</tbody></table></div>' +
-        '<div class="row"><button class="btn btn-ghost btn-sm" id="dp-ver-original">Ver original</button>' +
-        (nota.pdf_firmado_id ? '<button class="btn btn-ghost btn-sm" id="dp-ver-firmado">Ver firmado</button>' : '') + '</div>' +
-        (nota.estado === 'Firmada' ?
-          '<div class="field"><div class="field-label">Marcar pago programado</div>' +
-          '<input type="date" id="dp-fecha-pago" class="input"><button class="btn btn-primary btn-sm" id="dp-marcar-pago" style="margin-top:8px;">Marcar</button></div>' : '') +
-        '</div>';
+  /**
+   * `notasListado` ya trae la Nota completa (viene del índice, que guarda copias completas —
+   * ver listarNotasIndice_). Abrir el panel de inmediato con ese dato evita esperar el
+   * round-trip de getNotaVerificada (lento en Notas legacy por la reparación de rev que
+   * hace esa llamada) — la verificación se dispara igual, pero en segundo plano.
+   */
+  let detalleAbiertoActual = null;
 
-      Amp.openSidePanel({ title: 'Nota N° ' + nota.id_nota, html: html });
+  function construirDetalleNotaHtml(nota, verificando) {
+    const montoTotal = (nota.casos || []).reduce((s, c) => s + (Number(c.monto) || 0), 0);
+    return (
+      '<div class="col" style="gap:14px;">' +
+      (verificando ? '<div class="row" style="gap:6px;"><span class="amp-spinner sm"></span><span class="text-muted" style="font-size:12px;">Verificando…</span></div>' : '') +
+      '<div><span class="badge badge-ui">' + Util.escapeHtml(nota.estado) + '</span>' +
+      (nota.origen === 'legacy' ? ' <span class="badge badge-warning">LEGACY — importada del sistema anterior</span>' : '') + '</div>' +
+      '<div><div class="field-label">Seller</div>' + Util.escapeHtml(nota.seller_nombre || nota.seller) + '</div>' +
+      '<div><div class="field-label">Período</div>' + Util.escapeHtml(nota.periodo || '') + '</div>' +
+      '<div><div class="field-label">Monto Total</div>' + Util.formatCLP(montoTotal) + '</div>' +
+      '<div><div class="field-label">Fecha generada</div>' + Util.escapeHtml(nota.fecha_generada || '') + '</div>' +
+      '<div><div class="field-label">Fecha firma</div>' + Util.escapeHtml(nota.fecha_firma || '—') + '</div>' +
+      '<div class="table-wrap"><table class="table"><thead><tr><th>ID Pedido</th><th>Monto</th></tr></thead><tbody>' +
+      (nota.casos || []).map(c => '<tr><td>' + Util.escapeHtml(c.id_pedido) + '</td><td>' + Util.formatCLP(c.monto) + '</td></tr>').join('') +
+      '</tbody></table></div>' +
+      '<div class="row"><button class="btn btn-ghost btn-sm" id="dp-ver-original">Ver original</button>' +
+      (nota.pdf_firmado_id ? '<button class="btn btn-ghost btn-sm" id="dp-ver-firmado">Ver firmado</button>' : '') + '</div>' +
+      (nota.estado === 'Firmada' ?
+        '<div class="field"><div class="field-label">Marcar pago programado</div>' +
+        '<input type="date" id="dp-fecha-pago" class="input"><button class="btn btn-primary btn-sm" id="dp-marcar-pago" style="margin-top:8px;">Marcar</button></div>' : '') +
+      '</div>'
+    );
+  }
 
-      document.getElementById('dp-ver-original').addEventListener('click', () => verArchivoAdmin('original', seller, idNota));
-      const btnFirmado = document.getElementById('dp-ver-firmado');
-      if (btnFirmado) btnFirmado.addEventListener('click', () => verArchivoAdmin('firmado', seller, idNota));
-      const btnPago = document.getElementById('dp-marcar-pago');
-      if (btnPago) btnPago.addEventListener('click', () => {
-        const fecha = document.getElementById('dp-fecha-pago').value;
-        if (!fecha) { Amp.showToast('Selecciona una fecha', 'warning'); return; }
-        Amp.setButtonLoading(btnPago, true);
-        Api.post('marcarPagoProgramado', { seller: seller, idNota: idNota, fecha: fecha, sesionAdmin: getSesion() }).then(r => {
-          Amp.setButtonLoading(btnPago, false);
-          if (r.ok) { Amp.showToast('Pago programado', 'success'); Amp.closeSidePanel(); cargarListado(); }
-          else Amp.showToast('No se pudo marcar el pago', 'danger');
-        });
+  function bindDetalleNotaHandlers(seller, idNota) {
+    document.getElementById('dp-ver-original').addEventListener('click', () => verArchivoAdmin('original', seller, idNota));
+    const btnFirmado = document.getElementById('dp-ver-firmado');
+    if (btnFirmado) btnFirmado.addEventListener('click', () => verArchivoAdmin('firmado', seller, idNota));
+    const btnPago = document.getElementById('dp-marcar-pago');
+    if (btnPago) btnPago.addEventListener('click', () => {
+      const fecha = document.getElementById('dp-fecha-pago').value;
+      if (!fecha) { Amp.showToast('Selecciona una fecha', 'warning'); return; }
+      Amp.setButtonLoading(btnPago, true);
+      Api.post('marcarPagoProgramado', { seller: seller, idNota: idNota, fecha: fecha, sesionAdmin: getSesion() }).then(r => {
+        Amp.setButtonLoading(btnPago, false);
+        if (r.ok) { Amp.showToast('Pago programado', 'success'); Amp.closeSidePanel(); cargarListado(); }
+        else Amp.showToast('No se pudo marcar el pago', 'danger');
       });
+    });
+  }
+
+  function abrirDetalleNota(seller, idNota) {
+    const clave = seller + '|' + idNota;
+    detalleAbiertoActual = clave;
+    const cacheada = notasListado.find(n => n.seller === seller && n.id_nota === idNota);
+
+    if (cacheada) {
+      Amp.openSidePanel({ title: 'Nota N° ' + idNota, html: construirDetalleNotaHtml(cacheada, true) });
+      bindDetalleNotaHandlers(seller, idNota);
+    } else {
+      Amp.openSidePanel({ title: 'Nota N° ' + idNota, html: '<div class="row" style="justify-content:center;padding:40px;"><span class="amp-spinner lg"></span></div>' });
+    }
+
+    Api.get('getNotaVerificada', { seller: seller, idNota: idNota, sesionAdmin: getSesion() }).then(res => {
+      if (detalleAbiertoActual !== clave) return; // el admin ya abrió otra Nota mientras tanto
+      if (!res.ok) {
+        if (!cacheada) Amp.showToast('No se pudo cargar la Nota', 'danger');
+        return;
+      }
+      const nota = res.data;
+      Amp.openSidePanel({ title: 'Nota N° ' + nota.id_nota, html: construirDetalleNotaHtml(nota, false) });
+      bindDetalleNotaHandlers(seller, idNota);
     });
   }
 
@@ -219,41 +299,105 @@
   }
 
   function cargarPreview() {
-    document.getElementById('generar-resultado').classList.add('hidden');
     Api.get('previsualizarNotas', { sesionAdmin: getSesion() }).then(res => {
       if (!res.ok) { Amp.showToast('No se pudo cargar el preview', 'danger'); return; }
       preview = res.data;
       renderPreview();
     });
   }
+
+  function toggleSellerRow(row, forzarExpandido) {
+    const body = row.querySelector('.seller-row-body');
+    const icon = row.querySelector('.seller-row-toggle .material-symbols-rounded');
+    const expandido = forzarExpandido !== undefined ? forzarExpandido : body.classList.contains('hidden');
+    body.classList.toggle('hidden', !expandido);
+    icon.textContent = expandido ? 'expand_less' : 'expand_more';
+  }
+
+  function actualizarResumenSeleccionGenerar() {
+    const total = document.querySelectorAll('.chk-seller').length;
+    const seleccionados = document.querySelectorAll('.chk-seller:checked').length;
+    document.getElementById('generar-seleccion-resumen').textContent = seleccionados + ' de ' + total + ' seller(s) seleccionados';
+  }
+
   function renderPreview() {
-    const cont = document.getElementById('generar-cards');
+    const cont = document.getElementById('generar-lista');
     cont.innerHTML = '';
     preview.sellers.forEach(s => {
       const esMissing = preview.missingSellers.indexOf(s.sellerNombre) !== -1;
       const esBadBank = preview.badBankSellers.indexOf(s.sellerNombre) !== -1;
-      const card = document.createElement('div');
-      card.className = 'card seller-card';
-      card.innerHTML =
-        '<div class="card-head">' +
-        '<label class="checkbox"><input type="checkbox" class="chk-seller" data-seller="' + Util.escapeHtml(s.seller) + '" checked><span class="checkbox-box"></span>' +
-        '<div><div style="font-size:17px;font-weight:700;">' + Util.escapeHtml(s.sellerNombre) + '</div>' +
-        '<div class="text-muted" style="font-size:12px;">' + Util.escapeHtml(s.razonSocial) + ' · ' + Util.escapeHtml(s.rut) + '</div></div></label>' +
-        (esMissing ? '<span class="badge badge-danger">Seller no encontrado en Datos Bancarios</span>' : '') +
-        (esBadBank ? '<span class="badge badge-danger">Falta info bancaria</span>' : '') +
+      const necesitaAtencion = esMissing || esBadBank;
+
+      const row = document.createElement('div');
+      row.className = 'seller-row';
+      row.dataset.seller = s.seller;
+      row.innerHTML =
+        '<div class="seller-row-head">' +
+        '<label class="checkbox seller-row-check"><input type="checkbox" class="chk-seller" data-seller="' + Util.escapeHtml(s.seller) + '" checked><span class="checkbox-box"></span></label>' +
+        '<div class="seller-row-info">' +
+        '<div class="seller-row-name">' + Util.escapeHtml(s.sellerNombre) +
+        (esMissing ? ' <span class="badge badge-danger">Seller no encontrado en Datos Bancarios</span>' : '') +
+        (esBadBank ? ' <span class="badge badge-danger">Falta info bancaria</span>' : '') +
+        '<span class="seller-row-result-badge"></span>' +
         '</div>' +
-        '<div class="text-muted" style="font-size:13px;margin-bottom:8px;">' + Util.escapeHtml(s.banco) + ' · ' + Util.escapeHtml(s.cuenta) + '</div>' +
+        '<div class="text-muted seller-row-meta">' + s.casos.length + ' pedido(s) · Total ' + Util.formatCLP(s.montoTotal) + ' · ' + Util.escapeHtml(s.razonSocial) + '</div>' +
+        '</div>' +
+        '<button type="button" class="btn btn-icon btn-ghost seller-row-toggle"><span class="material-symbols-rounded">' + (necesitaAtencion ? 'expand_less' : 'expand_more') + '</span></button>' +
+        '</div>' +
+        '<div class="seller-row-body' + (necesitaAtencion ? '' : ' hidden') + '">' +
+        '<div class="text-muted" style="font-size:13px;margin-bottom:8px;">' + Util.escapeHtml(s.banco) + ' · ' + Util.escapeHtml(s.cuenta) + ' · ' + Util.escapeHtml(s.rut) + '</div>' +
         '<div class="table-wrap"><table class="table"><thead><tr><th>ID Pedido</th><th>Monto</th></tr></thead><tbody>' +
         s.casos.map(c => '<tr><td>' + Util.escapeHtml(c.idPedido) + '</td><td>' + Util.formatCLP(c.monto) + '</td></tr>').join('') +
         '</tbody></table></div>' +
-        '<div style="text-align:right;margin-top:8px;font-weight:700;">Total: ' + Util.formatCLP(s.montoTotal) + '</div>';
+        '<div class="seller-row-result"></div>' +
+        '</div>';
 
-      const chk = card.querySelector('.chk-seller');
-      chk.addEventListener('change', () => card.classList.toggle('is-deselected', !chk.checked));
-      cont.appendChild(card);
+      const chk = row.querySelector('.chk-seller');
+      chk.addEventListener('change', () => { row.classList.toggle('is-deselected', !chk.checked); actualizarResumenSeleccionGenerar(); });
+
+      row.querySelector('.seller-row-head').addEventListener('click', e => {
+        if (e.target.closest('.seller-row-check')) return;
+        toggleSellerRow(row);
+      });
+
+      cont.appendChild(row);
     });
+    actualizarResumenSeleccionGenerar();
   }
   document.getElementById('btn-refrescar-preview').addEventListener('click', cargarPreview);
+
+  document.getElementById('btn-seleccionar-todos').addEventListener('click', () => {
+    document.querySelectorAll('.chk-seller').forEach(chk => { chk.checked = true; chk.closest('.seller-row').classList.remove('is-deselected'); });
+    actualizarResumenSeleccionGenerar();
+  });
+  document.getElementById('btn-limpiar-seleccion').addEventListener('click', () => {
+    document.querySelectorAll('.chk-seller').forEach(chk => { chk.checked = false; chk.closest('.seller-row').classList.add('is-deselected'); });
+    actualizarResumenSeleccionGenerar();
+  });
+
+  /** Pinta el resultado de generación directamente en la fila del seller (sin lista aparte) y la expande. */
+  function aplicarResultadoGeneracion_(r) {
+    const row = Array.from(document.querySelectorAll('.seller-row')).find(el => el.dataset.seller === r.seller);
+    if (!row) return;
+
+    row.querySelector('.seller-row-result-badge').innerHTML = r.ok
+      ? ' <span class="badge badge-success">Nota N° ' + Util.escapeHtml(r.idNota) + '</span>'
+      : ' <span class="badge badge-danger">Error</span>';
+
+    const resultCont = row.querySelector('.seller-row-result');
+    resultCont.innerHTML =
+      '<div class="alert ' + (r.ok ? 'alert-success' : 'alert-danger') + '" style="margin-top:12px;">' +
+      (r.ok
+        ? '<span class="material-symbols-rounded icon-fill">check_circle</span><span>Nota N° ' + Util.escapeHtml(r.idNota) + ' generada</span>' +
+          ' <button class="btn btn-ghost btn-sm btn-ver-generada" data-seller="' + Util.escapeHtml(r.seller) + '" data-id-nota="' + Util.escapeHtml(r.idNota) + '">Previsualizar</button>'
+        : '<span class="material-symbols-rounded">error</span><span>Error: ' + Util.escapeHtml(r.error) + '</span>') +
+      '</div>';
+
+    const btnVer = resultCont.querySelector('.btn-ver-generada');
+    if (btnVer) btnVer.addEventListener('click', () => verArchivoAdmin('original', btnVer.dataset.seller, btnVer.dataset.idNota));
+
+    toggleSellerRow(row, true);
+  }
 
   document.getElementById('btn-confirmar-generacion').addEventListener('click', () => {
     const seleccionados = Array.from(document.querySelectorAll('.chk-seller:checked')).map(c => c.dataset.seller);
@@ -263,57 +407,100 @@
     const proveedorPreferido = document.getElementById('select-proveedor-pdf').value;
 
     document.getElementById('generar-progreso').classList.remove('hidden');
-    document.getElementById('generar-resultado').classList.add('hidden');
     document.getElementById('btn-confirmar-generacion').disabled = true;
 
     Api.post(accion, { sellersSeleccionados: seleccionados, proveedorPreferido: proveedorPreferido, sesionAdmin: getSesion() }).then(res => {
       document.getElementById('generar-progreso').classList.add('hidden');
       document.getElementById('btn-confirmar-generacion').disabled = false;
-      const resCont = document.getElementById('generar-resultado');
-      resCont.classList.remove('hidden');
       if (!res.ok) { Amp.showToast(res.detalle || 'No se pudo generar', 'danger'); return; }
 
-      resCont.innerHTML = res.data.map(r =>
-        '<div class="alert ' + (r.ok ? 'alert-success' : 'alert-danger') + '">' +
-        (r.ok
-          ? '<span class="material-symbols-rounded icon-fill">check_circle</span><span>' + Util.escapeHtml(r.sellerNombre) + ' — Nota N° ' + Util.escapeHtml(r.idNota) + ' generada</span>' +
-            ' <button class="btn btn-ghost btn-sm btn-ver-generada" data-seller="' + Util.escapeHtml(r.seller) + '" data-id-nota="' + Util.escapeHtml(r.idNota) + '">Previsualizar</button>'
-          : '<span class="material-symbols-rounded">error</span><span>' + Util.escapeHtml(r.sellerNombre) + ' — error: ' + Util.escapeHtml(r.error) + '</span>') +
-        '</div>'
-      ).join('');
-
-      resCont.querySelectorAll('.btn-ver-generada').forEach(btn => {
-        btn.addEventListener('click', () => verArchivoAdmin('original', btn.dataset.seller, btn.dataset.idNota));
-      });
+      res.data.forEach(aplicarResultadoGeneracion_);
 
       const huboFallos = res.data.some(r => !r.ok);
-      if (huboFallos) Amp.showToast('Generación completada con errores — revisa el detalle abajo', 'warning');
+      if (huboFallos) Amp.showToast('Generación completada con errores — revisa el detalle en cada seller', 'warning');
       else Amp.showToast('Generación completada', 'success');
       tabsCargados['tab-listado'] = false; // forzar recarga la próxima vez que se visite
     });
   });
 
   // ── Tab: Auditoría ────────────────────────────────────────
+  let auditoriaData = { yaProcesado: [], pendienteAprobacion: [], bloqueado: [] };
+  let msSellersAuditoria = null;
+  const auditoriaFiltro = { sellers: [] };
+  const auditoriaPaginas = { bloqueado: 1, pendiente: 1, procesado: 1 };
+  const auditoriaPageSize = { bloqueado: 20, pendiente: 20, procesado: 20 };
+
   function cargarAuditoria() {
     Api.get('listarCasosNoElegibles', { sesionAdmin: getSesion() }).then(res => {
       if (!res.ok) { Amp.showToast('No se pudo cargar la auditoría', 'danger'); return; }
-      const { yaProcesado, pendienteAprobacion, bloqueado } = res.data;
+      auditoriaData = res.data;
+      document.getElementById('count-pendiente').textContent = auditoriaData.pendienteAprobacion.length;
+      document.getElementById('count-procesado').textContent = auditoriaData.yaProcesado.length;
 
-      document.getElementById('auditoria-bloqueado-body').innerHTML = bloqueado.map(f =>
-        '<tr><td>' + f.fila + '</td><td>' + Util.escapeHtml(f.seller) + '</td><td>' + Util.escapeHtml(f.idPedido) + '</td>' +
+      const sellersUnicos = Array.from(new Set(
+        [].concat(auditoriaData.bloqueado, auditoriaData.pendienteAprobacion, auditoriaData.yaProcesado).map(f => f.seller)
+      )).sort();
+      if (!msSellersAuditoria) {
+        msSellersAuditoria = Amp.multiSelect(document.getElementById('filtro-sellers-auditoria'), {
+          label: 'Sellers',
+          options: sellersUnicos.map(s => ({ value: s, label: s })),
+          onChange: sel => {
+            auditoriaFiltro.sellers = sel;
+            auditoriaPaginas.bloqueado = auditoriaPaginas.pendiente = auditoriaPaginas.procesado = 1;
+            renderAuditoria();
+          }
+        });
+      } else {
+        msSellersAuditoria.setOptions(sellersUnicos.map(s => ({ value: s, label: s })));
+      }
+      renderAuditoria();
+    });
+  }
+
+  function filtrarAuditoriaPorSeller_(lista) {
+    if (auditoriaFiltro.sellers.length === 0) return lista;
+    const set = new Set(auditoriaFiltro.sellers);
+    return lista.filter(f => set.has(f.seller));
+  }
+
+  function renderTablaAuditoriaPaginada_(config) {
+    const filtrada = filtrarAuditoriaPorSeller_(config.lista);
+    const totalPaginas = Math.max(1, Math.ceil(filtrada.length / auditoriaPageSize[config.pageKey]));
+    auditoriaPaginas[config.pageKey] = Math.min(auditoriaPaginas[config.pageKey], totalPaginas);
+    const desde = (auditoriaPaginas[config.pageKey] - 1) * auditoriaPageSize[config.pageKey];
+    const slice = filtrada.slice(desde, desde + auditoriaPageSize[config.pageKey]);
+
+    const mensajeVacio = filtrada.length === 0 && config.lista.length > 0 ? 'Sin resultados para estos filtros' : config.vacioHtml;
+    document.getElementById(config.tbodyId).innerHTML = slice.map(config.filaHtml).join('') ||
+      '<tr><td colspan="' + config.colspan + '" class="text-muted" style="text-align:center;padding:24px;">' + mensajeVacio + '</td></tr>';
+
+    Amp.renderPagination(document.getElementById(config.paginacionId), {
+      page: auditoriaPaginas[config.pageKey], pageSize: auditoriaPageSize[config.pageKey], total: filtrada.length,
+      onPageChange: p => { auditoriaPaginas[config.pageKey] = p; renderTablaAuditoriaPaginada_(config); },
+      onPageSizeChange: n => { auditoriaPageSize[config.pageKey] = n; auditoriaPaginas[config.pageKey] = 1; renderTablaAuditoriaPaginada_(config); }
+    });
+  }
+
+  function renderAuditoria() {
+    renderTablaAuditoriaPaginada_({
+      lista: auditoriaData.bloqueado, tbodyId: 'auditoria-bloqueado-body', paginacionId: 'auditoria-bloqueado-paginacion',
+      pageKey: 'bloqueado', colspan: 5,
+      filaHtml: f => '<tr><td>' + f.fila + '</td><td>' + Util.escapeHtml(f.seller) + '</td><td>' + Util.escapeHtml(f.idPedido) + '</td>' +
         '<td><span class="badge badge-danger">' + Util.escapeHtml(f.motivo) + '</span></td>' +
-        '<td><a class="btn btn-link btn-sm" href="' + f.link + '" target="_blank" rel="noopener">Ver en Sheet</a></td></tr>'
-      ).join('') || '<tr><td colspan="5" class="text-muted">Sin casos bloqueados 🎉</td></tr>';
-
-      document.getElementById('count-pendiente').textContent = pendienteAprobacion.length;
-      document.getElementById('auditoria-pendiente-body').innerHTML = pendienteAprobacion.map(f =>
-        '<tr><td>' + f.fila + '</td><td>' + Util.escapeHtml(f.seller) + '</td><td>' + Util.escapeHtml(f.idPedido) + '</td><td>' + Util.escapeHtml(f.estado) + '</td></tr>'
-      ).join('');
-
-      document.getElementById('count-procesado').textContent = yaProcesado.length;
-      document.getElementById('auditoria-procesado-body').innerHTML = yaProcesado.map(f =>
-        '<tr><td>' + f.fila + '</td><td>' + Util.escapeHtml(f.seller) + '</td><td>' + Util.escapeHtml(f.idPedido) + '</td></tr>'
-      ).join('');
+        '<td><a class="btn btn-link btn-sm" href="' + f.link + '" target="_blank" rel="noopener">Ver en Sheet</a></td></tr>',
+      vacioHtml: 'Sin casos bloqueados 🎉'
+    });
+    renderTablaAuditoriaPaginada_({
+      lista: auditoriaData.pendienteAprobacion, tbodyId: 'auditoria-pendiente-body', paginacionId: 'auditoria-pendiente-paginacion',
+      pageKey: 'pendiente', colspan: 4,
+      filaHtml: f => '<tr><td>' + f.fila + '</td><td>' + Util.escapeHtml(f.seller) + '</td><td>' + Util.escapeHtml(f.idPedido) + '</td><td>' + Util.escapeHtml(f.estado) + '</td></tr>',
+      vacioHtml: 'Sin casos pendientes'
+    });
+    renderTablaAuditoriaPaginada_({
+      lista: auditoriaData.yaProcesado, tbodyId: 'auditoria-procesado-body', paginacionId: 'auditoria-procesado-paginacion',
+      pageKey: 'procesado', colspan: 3,
+      filaHtml: f => '<tr><td>' + f.fila + '</td><td>' + Util.escapeHtml(f.seller) + '</td><td>' + Util.escapeHtml(f.idPedido) + '</td></tr>',
+      vacioHtml: 'Sin casos procesados'
     });
   }
 

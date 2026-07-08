@@ -718,6 +718,47 @@ html[data-theme="dark"] .alert-danger  { color: #fca5a5; }
 @media (max-width: 680px) { #doc-viewer.amp-panel { width: 100vw; } }
 
 /* ────────────────────────────────────────────────────────────
+   MULTISELECT DROPDOWN
+   ──────────────────────────────────────────────────────────── */
+.ms-dropdown { position: relative; display: inline-flex; }
+.ms-dropdown-btn { display: inline-flex; align-items: center; gap: 6px; }
+.ms-dropdown-count {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 18px; height: 18px; padding: 0 5px; margin-left: 2px;
+  font-size: 10px; border-radius: var(--r-pill);
+}
+.ms-dropdown-panel {
+  position: absolute; top: calc(100% + 6px); left: 0; z-index: var(--z-raised);
+  width: 240px; max-width: 80vw;
+  background: var(--bg-surface); border: 1px solid var(--border);
+  border-radius: var(--r-2); box-shadow: var(--shadow-4);
+  padding: var(--sp-2);
+}
+.ms-dropdown-actions {
+  display: flex; justify-content: space-between; gap: var(--sp-2);
+  padding: 2px 4px 6px; margin-bottom: 4px; border-bottom: 1px solid var(--border);
+}
+.ms-dropdown-list { max-height: 240px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
+.ms-dropdown-item { padding: 6px 4px; border-radius: var(--r-1); }
+.ms-dropdown-item:hover { background: var(--bg-surface-2); }
+.ms-dropdown-empty { padding: 10px 6px; font-size: var(--fs-sm); }
+
+/* ────────────────────────────────────────────────────────────
+   PAGINATION BAR
+   ──────────────────────────────────────────────────────────── */
+.pagination-bar {
+  display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap;
+  gap: var(--sp-3); padding: 10px 14px;
+  border-top: 1px solid var(--border); background: var(--bg-surface);
+  font-size: var(--fs-sm);
+}
+.pagination-size { display: inline-flex; align-items: center; gap: 8px; }
+.pagination-size-select { width: auto; padding: 4px 26px 4px 10px; font-size: var(--fs-sm); }
+.pagination-nav { display: inline-flex; align-items: center; gap: 2px; }
+.pagination-page { padding: 0 8px; color: var(--fg-muted); }
+.pagination-summary { white-space: nowrap; }
+
+/* ────────────────────────────────────────────────────────────
    TOOLTIP (CSS)
    ──────────────────────────────────────────────────────────── */
 [data-tip] { position: relative; }

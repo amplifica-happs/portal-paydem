@@ -35,7 +35,7 @@
     <div class="card-pop">
       <div class="card-head">
         <div>
-          <div class="eyebrow">Nota de Cobro N&deg; <span id="nota-id"></span></div>
+          <div class="eyebrow">Caso Indemnizaciones N&deg; <span id="nota-id"></span></div>
           <h2 id="nota-seller"></h2>
         </div>
         <span id="nota-estado-badge" class="badge badge-ui"></span>
@@ -52,17 +52,20 @@
         </div>
       </div>
 
-      <div class="table-wrap" style="margin-bottom:20px;">
+      <div class="row" style="margin-bottom:20px;">
+        <button class="btn btn-ghost" id="btn-ver-original">
+          <span class="material-symbols-rounded">visibility</span> Ver Nota de Cobro
+        </button>
+      </div>
+
+      <button class="btn btn-link btn-sm" id="btn-toggle-detalle-casos" style="margin-bottom:8px;">
+        <span class="material-symbols-rounded">expand_more</span> Ver detalle de pedidos
+      </button>
+      <div class="table-wrap hidden" id="nota-casos-wrap" style="margin-bottom:20px;">
         <table class="table">
           <thead><tr><th>ID Pedido</th><th>Monto</th><th>Responsable</th></tr></thead>
           <tbody id="nota-casos-body"></tbody>
         </table>
-      </div>
-
-      <div class="row" style="margin-bottom:20px;">
-        <button class="btn btn-ghost" id="btn-ver-original">
-          <span class="material-symbols-rounded">visibility</span> Ver Nota
-        </button>
       </div>
 
       <div id="nota-firma-pendiente">

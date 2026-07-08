@@ -239,6 +239,138 @@
     if (panel._objectUrl) { URL.revokeObjectURL(panel._objectUrl); panel._objectUrl = null; }
   }
 
+  // ─── Multiselect dropdown filter ──────────────────────────
+  function escLocal(str) {
+    return String(str == null ? '' : str)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  /**
+   * Botón + panel flotante con checkboxes. Selección vacía = sin filtro (no "0 resultados"
+   * por default). onChange recibe el array de valores seleccionados en cada cambio.
+   */
+  function multiSelect(containerEl, { label = '', options = [], onChange } = {}) {
+    let opts = options;
+    const selected = new Set();
+
+    const wrap = document.createElement('div');
+    wrap.className = 'ms-dropdown';
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn btn-ghost ms-dropdown-btn';
+    const panel = document.createElement('div');
+    panel.className = 'ms-dropdown-panel hidden';
+    wrap.appendChild(btn);
+    wrap.appendChild(panel);
+    containerEl.appendChild(wrap);
+
+    function updateLabel() {
+      const n = selected.size;
+      btn.innerHTML = '<span class="material-symbols-rounded">filter_list</span>' + escLocal(label) +
+        (n > 0 ? '<span class="badge badge-ui ms-dropdown-count">' + n + '</span>' : '');
+    }
+
+    function emitChange() { onChange && onChange(Array.from(selected)); }
+
+    function renderPanel() {
+      panel.innerHTML =
+        '<div class="ms-dropdown-actions">' +
+        '<button type="button" class="btn btn-link btn-sm" data-ms-all">Todos</button>' +
+        '<button type="button" class="btn btn-link btn-sm" data-ms-clear">Limpiar</button>' +
+        '</div>' +
+        '<div class="ms-dropdown-list">' +
+        (opts.length === 0
+          ? '<div class="text-muted ms-dropdown-empty">Sin opciones</div>'
+          : opts.map(o =>
+              '<label class="checkbox ms-dropdown-item"><input type="checkbox" value="' + escLocal(o.value) + '"' +
+              (selected.has(o.value) ? ' checked' : '') + '><span class="checkbox-box"></span>' + escLocal(o.label) + '</label>'
+            ).join('')) +
+        '</div>';
+
+      panel.querySelectorAll('input[type=checkbox]').forEach(chk => {
+        chk.addEventListener('change', () => {
+          if (chk.checked) selected.add(chk.value); else selected.delete(chk.value);
+          updateLabel();
+          emitChange();
+        });
+      });
+      panel.querySelector('[data-ms-all]').addEventListener('click', () => {
+        opts.forEach(o => selected.add(o.value));
+        renderPanel(); updateLabel(); emitChange();
+      });
+      panel.querySelector('[data-ms-clear]').addEventListener('click', () => {
+        selected.clear();
+        renderPanel(); updateLabel(); emitChange();
+      });
+    }
+
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const isOpen = !panel.classList.contains('hidden');
+      document.querySelectorAll('.ms-dropdown-panel').forEach(p => p.classList.add('hidden'));
+      if (!isOpen) panel.classList.remove('hidden');
+    });
+    document.addEventListener('click', e => {
+      if (!wrap.contains(e.target)) panel.classList.add('hidden');
+    });
+
+    updateLabel();
+    renderPanel();
+
+    return {
+      getSelected: () => Array.from(selected),
+      setOptions: (newOptions) => {
+        opts = newOptions || [];
+        const validValues = new Set(opts.map(o => o.value));
+        Array.from(selected).forEach(v => { if (!validValues.has(v)) selected.delete(v); });
+        renderPanel(); updateLabel();
+      }
+    };
+  }
+
+  // ─── Pagination bar ────────────────────────────────────────
+  /** Barra "Mostrar N · X–Y de Z · « ‹ page › »" — se pinta siempre dentro del .table-wrap. */
+  function renderPagination(containerEl, opts = {}) {
+    const {
+      page = 1, pageSize = 20, total = 0,
+      pageSizeOptions = [10, 20, 50],
+      onPageChange, onPageSizeChange
+    } = opts;
+
+    const totalPages = Math.max(1, Math.ceil(total / pageSize));
+    const curPage = Math.min(Math.max(1, page), totalPages);
+    const from = total === 0 ? 0 : (curPage - 1) * pageSize + 1;
+    const to = Math.min(curPage * pageSize, total);
+
+    containerEl.innerHTML =
+      '<div class="pagination-bar">' +
+      '<label class="pagination-size">' +
+      '<span class="text-muted">Mostrar</span>' +
+      '<select class="select pagination-size-select">' +
+      pageSizeOptions.map(n => '<option value="' + n + '"' + (n === pageSize ? ' selected' : '') + '>' + n + '</option>').join('') +
+      '</select>' +
+      '</label>' +
+      '<span class="text-muted tabular pagination-summary">' + from + '&ndash;' + to + ' de ' + total + '</span>' +
+      '<div class="pagination-nav">' +
+      '<button type="button" class="btn btn-ghost btn-icon btn-sm" data-pg="first"' + (curPage <= 1 ? ' disabled' : '') + '><span class="material-symbols-rounded">first_page</span></button>' +
+      '<button type="button" class="btn btn-ghost btn-icon btn-sm" data-pg="prev"' + (curPage <= 1 ? ' disabled' : '') + '><span class="material-symbols-rounded">chevron_left</span></button>' +
+      '<span class="pagination-page tabular">' + curPage + ' / ' + totalPages + '</span>' +
+      '<button type="button" class="btn btn-ghost btn-icon btn-sm" data-pg="next"' + (curPage >= totalPages ? ' disabled' : '') + '><span class="material-symbols-rounded">chevron_right</span></button>' +
+      '<button type="button" class="btn btn-ghost btn-icon btn-sm" data-pg="last"' + (curPage >= totalPages ? ' disabled' : '') + '><span class="material-symbols-rounded">last_page</span></button>' +
+      '</div>' +
+      '</div>';
+
+    const goTo = p => { if (p !== curPage) onPageChange && onPageChange(p); };
+    containerEl.querySelector('.pagination-size-select').addEventListener('change', e => {
+      onPageSizeChange && onPageSizeChange(Number(e.target.value));
+    });
+    containerEl.querySelector('[data-pg="first"]').addEventListener('click', () => goTo(1));
+    containerEl.querySelector('[data-pg="prev"]').addEventListener('click', () => goTo(curPage - 1));
+    containerEl.querySelector('[data-pg="next"]').addEventListener('click', () => goTo(curPage + 1));
+    containerEl.querySelector('[data-pg="last"]').addEventListener('click', () => goTo(totalPages));
+  }
+
   // Expose
   global.Amp = {
     toggleTheme, applyTheme,
@@ -249,5 +381,6 @@
     showInputModal,
     openSidePanel, closeSidePanel,
     openDocViewerLoading, renderDocViewerContent, showDocViewerError, closeDocViewer,
+    multiSelect, renderPagination,
   };
 })(window);

@@ -5,7 +5,23 @@
 .dash-tab:last-child { border-top-right-radius: var(--r-2); border-bottom-right-radius: var(--r-2); }
 .dash-tab.is-active { background: var(--ui); color: var(--ui-fg); border-color: var(--ui); }
 
-.seller-card .card-head { align-items: flex-start; }
-.seller-card.is-deselected { opacity: 0.5; }
-
 .fila-nota { cursor: pointer; }
+
+/* ── Generar Notas: filas colapsables por seller ─────────────── */
+.seller-row {
+  border: 1px solid var(--border);
+  border-radius: var(--r-2);
+  background: var(--bg-surface);
+  transition: opacity var(--dur-2) linear;
+}
+.seller-row.is-deselected { opacity: 0.55; }
+.seller-row-head {
+  display: flex; align-items: center; gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4); cursor: pointer;
+}
+.seller-row-check { flex-shrink: 0; }
+.seller-row-info { flex: 1; min-width: 0; }
+.seller-row-name { font-weight: 700; font-size: var(--fs-base); display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.seller-row-meta { font-size: var(--fs-xs); margin-top: 2px; }
+.seller-row-toggle { flex-shrink: 0; }
+.seller-row-body { padding: 0 var(--sp-4) var(--sp-4); border-top: 1px solid var(--border); padding-top: var(--sp-3); }
