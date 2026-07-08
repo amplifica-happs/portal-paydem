@@ -276,8 +276,8 @@
     function renderPanel() {
       panel.innerHTML =
         '<div class="ms-dropdown-actions">' +
-        '<button type="button" class="btn btn-link btn-sm" data-ms-all">Todos</button>' +
-        '<button type="button" class="btn btn-link btn-sm" data-ms-clear">Limpiar</button>' +
+        '<button type="button" class="btn btn-link btn-sm" data-ms-all="">Todos</button>' +
+        '<button type="button" class="btn btn-link btn-sm" data-ms-clear="">Limpiar</button>' +
         '</div>' +
         '<div class="ms-dropdown-list">' +
         (opts.length === 0
