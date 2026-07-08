@@ -68,11 +68,14 @@
   <section id="tab-generar" class="tab-section hidden">
     <div class="row" style="justify-content:space-between;margin-bottom:16px;">
       <h3>Vista previa de generación</h3>
-      <label class="toggle">
-        <input type="checkbox" id="toggle-modo-prueba">
-        <span class="toggle-track"></span>
-        Modo Prueba
-      </label>
+      <div class="row" style="gap:16px;align-items:center;">
+        <select id="select-proveedor-pdf" class="select" style="width:160px;"></select>
+        <label class="toggle">
+          <input type="checkbox" id="toggle-modo-prueba">
+          <span class="toggle-track"></span>
+          Modo Prueba
+        </label>
+      </div>
     </div>
     <div id="alerta-modo-prueba" class="alert alert-warning hidden" style="margin-bottom:16px;">
       Genera Notas de prueba enviadas solo a hectoralayninostroza@gmail.com, sin tocar datos reales.

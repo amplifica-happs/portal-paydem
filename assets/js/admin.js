@@ -88,7 +88,7 @@
 
       if (!tabsCargados[btn.dataset.tab]) {
         tabsCargados[btn.dataset.tab] = true;
-        if (btn.dataset.tab === 'tab-generar') cargarPreview();
+        if (btn.dataset.tab === 'tab-generar') { cargarPreview(); cargarProveedoresPdf(); }
         if (btn.dataset.tab === 'tab-auditoria') cargarAuditoria();
       }
     });
@@ -209,6 +209,15 @@
     document.getElementById('alerta-modo-prueba').classList.toggle('hidden', !e.target.checked);
   });
 
+  function cargarProveedoresPdf() {
+    const select = document.getElementById('select-proveedor-pdf');
+    if (select.options.length > 0) return; // ya poblado, no repetir la llamada
+    Api.get('listarProveedoresPdf', { sesionAdmin: getSesion() }).then(res => {
+      if (!res.ok) return;
+      select.innerHTML = res.data.map(p => '<option value="' + Util.escapeHtml(p.id) + '">' + Util.escapeHtml(p.nombre) + '</option>').join('');
+    });
+  }
+
   function cargarPreview() {
     document.getElementById('generar-resultado').classList.add('hidden');
     Api.get('previsualizarNotas', { sesionAdmin: getSesion() }).then(res => {
@@ -251,12 +260,13 @@
     if (seleccionados.length === 0) { Amp.showToast('Selecciona al menos un seller', 'warning'); return; }
     const modoPrueba = document.getElementById('toggle-modo-prueba').checked;
     const accion = modoPrueba ? 'generarNotasModoPrueba' : 'generarNotas';
+    const proveedorPreferido = document.getElementById('select-proveedor-pdf').value;
 
     document.getElementById('generar-progreso').classList.remove('hidden');
     document.getElementById('generar-resultado').classList.add('hidden');
     document.getElementById('btn-confirmar-generacion').disabled = true;
 
-    Api.post(accion, { sellersSeleccionados: seleccionados, sesionAdmin: getSesion() }).then(res => {
+    Api.post(accion, { sellersSeleccionados: seleccionados, proveedorPreferido: proveedorPreferido, sesionAdmin: getSesion() }).then(res => {
       document.getElementById('generar-progreso').classList.add('hidden');
       document.getElementById('btn-confirmar-generacion').disabled = false;
       const resCont = document.getElementById('generar-resultado');
