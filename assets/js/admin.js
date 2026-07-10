@@ -201,8 +201,11 @@
    */
   let detalleAbiertoActual = null;
 
+  const ESTADOS_REGENERABLES_ = ['Generada', 'Enviada', 'Vista', 'Token Expirado'];
+
   function construirDetalleNotaHtml(nota, verificando) {
     const montoTotal = (nota.casos || []).reduce((s, c) => s + (Number(c.monto) || 0), 0);
+    const puedeRegenerar = nota.origen !== 'legacy' && ESTADOS_REGENERABLES_.indexOf(nota.estado) !== -1;
     return (
       '<div class="col" style="gap:14px;">' +
       (verificando ? '<div class="row" style="gap:6px;"><span class="amp-spinner sm"></span><span class="text-muted" style="font-size:12px;">Verificando…</span></div>' : '') +
@@ -213,15 +216,39 @@
       '<div><div class="field-label">Monto Total</div>' + Util.formatCLP(montoTotal) + '</div>' +
       '<div><div class="field-label">Fecha generada</div>' + Util.escapeHtml(nota.fecha_generada || '') + '</div>' +
       '<div><div class="field-label">Fecha firma</div>' + Util.escapeHtml(nota.fecha_firma || '—') + '</div>' +
+      (nota.veces_regenerado ? '<div><div class="field-label">Regenerada</div>' + nota.veces_regenerado + ' vez(es) — última: ' + Util.escapeHtml(nota.fecha_ultima_regeneracion || '') + '</div>' : '') +
       '<div class="table-wrap"><table class="table"><thead><tr><th>ID Pedido</th><th>Monto</th></tr></thead><tbody>' +
       (nota.casos || []).map(c => '<tr><td>' + Util.escapeHtml(c.id_pedido) + '</td><td>' + Util.formatCLP(c.monto) + '</td></tr>').join('') +
       '</tbody></table></div>' +
       '<div class="row"><button class="btn btn-ghost btn-sm" id="dp-ver-original">Ver original</button>' +
       (nota.pdf_firmado_id ? '<button class="btn btn-ghost btn-sm" id="dp-ver-firmado">Ver firmado</button>' : '') + '</div>' +
+      '<div class="row" style="gap:8px;">' +
+      (nota.estado === 'Generada' ? '<button class="btn btn-primary btn-sm" id="dp-enviar-pendiente">Enviar por correo</button>' : '') +
+      (puedeRegenerar ? '<button class="btn btn-ghost btn-sm" id="dp-regenerar">Regenerar</button>' : '') +
+      '</div>' +
+      '<div id="dp-regenerar-panel" class="hidden"></div>' +
       (nota.estado === 'Firmada' ?
         '<div class="field"><div class="field-label">Marcar pago programado</div>' +
         '<input type="date" id="dp-fecha-pago" class="input"><button class="btn btn-primary btn-sm" id="dp-marcar-pago" style="margin-top:8px;">Marcar</button></div>' : '') +
       '</div>'
+    );
+  }
+
+  function construirDiffRegeneracionHtml_(diff) {
+    const filaCaso = (c, signo) => '<tr><td>' + signo + ' ' + Util.escapeHtml(c.id_pedido) + '</td><td>' + Util.formatCLP(c.monto) + '</td></tr>';
+    const sinCambios = diff.agregados.length === 0 && diff.removidos.length === 0;
+    return (
+      '<div class="alert alert-warning" style="margin-top:12px;">' +
+      '<div style="margin-bottom:8px;">Monto anterior: ' + Util.escapeHtml(diff.montoAnterior) + ' → Monto nuevo: ' + Util.escapeHtml(diff.montoNuevo) + '</div>' +
+      (sinCambios ? '<div class="text-muted">Sin cambios en los casos — solo se reconstruye el PDF.</div>' :
+        '<div class="table-wrap"><table class="table"><tbody>' +
+        diff.agregados.map(c => filaCaso(c, '+')).join('') +
+        diff.removidos.map(c => filaCaso(c, '−')).join('') +
+        '</tbody></table></div>') +
+      '<div class="row" style="gap:8px;margin-top:12px;">' +
+      '<button class="btn btn-primary btn-sm" id="dp-confirmar-regenerar">Confirmar regeneración</button>' +
+      '<button class="btn btn-ghost btn-sm" id="dp-cancelar-regenerar">Cancelar</button>' +
+      '</div></div>'
     );
   }
 
@@ -238,6 +265,48 @@
         Amp.setButtonLoading(btnPago, false);
         if (r.ok) { Amp.showToast('Pago programado', 'success'); Amp.closeSidePanel(); cargarListado(); }
         else Amp.showToast('No se pudo marcar el pago', 'danger');
+      });
+    });
+
+    const btnEnviarPendiente = document.getElementById('dp-enviar-pendiente');
+    if (btnEnviarPendiente) btnEnviarPendiente.addEventListener('click', () => {
+      Amp.setButtonLoading(btnEnviarPendiente, true);
+      Api.post('enviarNotaPendiente', { seller: seller, idNota: idNota, sesionAdmin: getSesion() }).then(r => {
+        Amp.setButtonLoading(btnEnviarPendiente, false);
+        if (r.ok) { Amp.showToast('Nota enviada por correo', 'success'); Amp.closeSidePanel(); cargarListado(); }
+        else Amp.showToast(r.detalle || 'No se pudo enviar la Nota', 'danger');
+      });
+    });
+
+    const btnRegenerar = document.getElementById('dp-regenerar');
+    if (btnRegenerar) btnRegenerar.addEventListener('click', () => {
+      Amp.setButtonLoading(btnRegenerar, true);
+      Api.get('previsualizarRegeneracion', { seller: seller, idNota: idNota, sesionAdmin: getSesion() }).then(res => {
+        Amp.setButtonLoading(btnRegenerar, false);
+        if (!res.ok) { Amp.showToast(res.detalle || 'No se pudo previsualizar la regeneración', 'danger'); return; }
+
+        const panel = document.getElementById('dp-regenerar-panel');
+        panel.classList.remove('hidden');
+        panel.innerHTML = construirDiffRegeneracionHtml_(res.data);
+
+        document.getElementById('dp-cancelar-regenerar').addEventListener('click', () => {
+          panel.classList.add('hidden');
+          panel.innerHTML = '';
+        });
+        const btnConfirmar = document.getElementById('dp-confirmar-regenerar');
+        btnConfirmar.addEventListener('click', () => {
+          Amp.setButtonLoading(btnConfirmar, true);
+          Api.post('regenerarNota', { seller: seller, idNota: idNota, sesionAdmin: getSesion() }).then(r => {
+            Amp.setButtonLoading(btnConfirmar, false);
+            if (!r.ok) { Amp.showToast(r.detalle || 'No se pudo regenerar la Nota', 'danger'); return; }
+            Amp.showToast(
+              r.data.estado === 'Enviada' ? 'Nota regenerada — se reenvió el aviso en el mismo hilo de correo' : 'Nota regenerada',
+              'success'
+            );
+            Amp.closeSidePanel();
+            cargarListado();
+          });
+        });
       });
     });
   }
@@ -384,11 +453,12 @@
       ? ' <span class="badge badge-success">Nota N° ' + Util.escapeHtml(r.idNota) + '</span>'
       : ' <span class="badge badge-danger">Error</span>';
 
+    const mensajeExito = r.estado === 'Generada' ? ' generada — pendiente de envío' : ' generada y enviada';
     const resultCont = row.querySelector('.seller-row-result');
     resultCont.innerHTML =
       '<div class="alert ' + (r.ok ? 'alert-success' : 'alert-danger') + '" style="margin-top:12px;">' +
       (r.ok
-        ? '<span class="material-symbols-rounded icon-fill">check_circle</span><span>Nota N° ' + Util.escapeHtml(r.idNota) + ' generada</span>' +
+        ? '<span class="material-symbols-rounded icon-fill">check_circle</span><span>Nota N° ' + Util.escapeHtml(r.idNota) + mensajeExito + '</span>' +
           ' <button class="btn btn-ghost btn-sm btn-ver-generada" data-seller="' + Util.escapeHtml(r.seller) + '" data-id-nota="' + Util.escapeHtml(r.idNota) + '">Previsualizar</button>'
         : '<span class="material-symbols-rounded">error</span><span>Error: ' + Util.escapeHtml(r.error) + '</span>') +
       '</div>';
@@ -405,11 +475,12 @@
     const modoPrueba = document.getElementById('toggle-modo-prueba').checked;
     const accion = modoPrueba ? 'generarNotasModoPrueba' : 'generarNotas';
     const proveedorPreferido = document.getElementById('select-proveedor-pdf').value;
+    const enviarInmediato = document.getElementById('toggle-enviar-inmediato').checked;
 
     document.getElementById('generar-progreso').classList.remove('hidden');
     document.getElementById('btn-confirmar-generacion').disabled = true;
 
-    Api.post(accion, { sellersSeleccionados: seleccionados, proveedorPreferido: proveedorPreferido, sesionAdmin: getSesion() }).then(res => {
+    Api.post(accion, { sellersSeleccionados: seleccionados, proveedorPreferido: proveedorPreferido, enviarInmediato: enviarInmediato, sesionAdmin: getSesion() }).then(res => {
       document.getElementById('generar-progreso').classList.add('hidden');
       document.getElementById('btn-confirmar-generacion').disabled = false;
       if (!res.ok) { Amp.showToast(res.detalle || 'No se pudo generar', 'danger'); return; }
