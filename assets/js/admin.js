@@ -102,6 +102,7 @@
   let clicsLogo = 0;
   let ultimoClicLogo = 0;
   let pruebasTabCreada = false;
+  let pruebasCtrl = null;
 
   document.querySelector('.amp-navbar').addEventListener('click', e => {
     if (!e.target.closest('.nav-logo')) return;
@@ -128,16 +129,30 @@
     section.id = 'tab-pruebas';
     section.className = 'tab-section hidden';
     section.innerHTML =
+      '<p class="text-muted" style="margin-bottom:16px;">Notas de prueba — namespace _pruebas, nunca entran al índice real.</p>' +
       '<div class="row" style="margin-bottom:16px;justify-content:space-between;">' +
-      '<h3 style="margin:0;">Notas de prueba — namespace _pruebas, nunca entran al índice real</h3>' +
+      '<div class="row">' +
+      '<input type="text" id="input-filtro-pruebas" class="input" placeholder="Buscar seller o N° Nota..." style="width:260px;">' +
+      '<div id="filtro-sellers-pruebas"></div>' +
+      '<div id="filtro-estados-pruebas"></div>' +
+      '</div>' +
       '<button class="btn btn-ghost btn-sm" id="btn-refrescar-pruebas"><span class="material-symbols-rounded">refresh</span> Refrescar</button>' +
       '</div>' +
       '<div class="table-wrap">' +
       '<table class="table"><thead><tr><th>N° Nota</th><th>Seller</th><th>Período</th><th>Estado</th><th>Monto</th></tr></thead>' +
       '<tbody id="pruebas-body"></tbody></table>' +
+      '<div id="pruebas-paginacion"></div>' +
       '</div>';
     document.getElementById('view-admin-shell').appendChild(section);
     document.getElementById('btn-refrescar-pruebas').addEventListener('click', cargarNotasPrueba);
+
+    pruebasCtrl = crearControladorListadoNotas_({
+      tbodyId: 'pruebas-body', filtroInputId: 'input-filtro-pruebas',
+      filtroSellersId: 'filtro-sellers-pruebas', filtroEstadosId: 'filtro-estados-pruebas',
+      paginacionId: 'pruebas-paginacion',
+      onRowClick: (seller, idNota) => abrirDetalleNotaPrueba(idNota),
+      mostrarLegacy: false // las Notas de prueba nunca son legacy
+    });
 
     Amp.showToast('Listado de Pruebas habilitado', 'success');
     activarTab(btn);
@@ -157,94 +172,118 @@
   poblarSelectAnio('select-anio-reconstruir');
   poblarSelectAnio('select-anio');
 
-  let notasListado = [];
-  const listadoFiltros = { sellers: [], estados: [] };
-  let listadoPagina = 1;
-  let listadoPageSize = 20;
-  let msSellersListado = null;
-  let msEstadosListado = null;
+  /**
+   * Controlador de filtros (sellers + estado, vía Amp.multiSelect) + búsqueda de texto +
+   * paginación (Amp.renderPagination) sobre una lista de Notas — compartido entre "Listado"
+   * (Notas reales) y "Pruebas" (namespace _pruebas), que solo difieren en de dónde sacan los
+   * datos y si muestran el badge LEGACY.
+   */
+  function crearControladorListadoNotas_({ tbodyId, filtroInputId, filtroSellersId, filtroEstadosId, paginacionId, onRowClick, mostrarLegacy }) {
+    let notas = [];
+    const filtros = { sellers: [], estados: [] };
+    let pagina = 1;
+    let pageSize = 20;
+    let msSellers = null;
+    let msEstados = null;
+
+    function actualizarOpcionesFiltros() {
+      const sellersUnicos = Array.from(new Set(notas.map(n => n.seller_nombre || n.seller))).sort();
+      const estadosUnicos = Array.from(new Set(notas.map(n => n.estado).filter(Boolean))).sort();
+      if (!msSellers) {
+        msSellers = Amp.multiSelect(document.getElementById(filtroSellersId), {
+          label: 'Sellers',
+          options: sellersUnicos.map(s => ({ value: s, label: s })),
+          onChange: sel => { filtros.sellers = sel; pagina = 1; aplicarFiltros(); }
+        });
+        msEstados = Amp.multiSelect(document.getElementById(filtroEstadosId), {
+          label: 'Estado',
+          options: estadosUnicos.map(e => ({ value: e, label: e })),
+          onChange: sel => { filtros.estados = sel; pagina = 1; aplicarFiltros(); }
+        });
+      } else {
+        msSellers.setOptions(sellersUnicos.map(s => ({ value: s, label: s })));
+        msEstados.setOptions(estadosUnicos.map(e => ({ value: e, label: e })));
+      }
+    }
+
+    function aplicarFiltros() {
+      const q = document.getElementById(filtroInputId).value.toLowerCase();
+      const sellersSet = new Set(filtros.sellers);
+      const estadosSet = new Set(filtros.estados);
+      const filtradas = notas.filter(n => {
+        const nombreSeller = n.seller_nombre || n.seller || '';
+        if (q && nombreSeller.toLowerCase().indexOf(q) === -1 && (n.id_nota || '').toLowerCase().indexOf(q) === -1) return false;
+        if (sellersSet.size > 0 && !sellersSet.has(nombreSeller)) return false;
+        if (estadosSet.size > 0 && !estadosSet.has(n.estado)) return false;
+        return true;
+      });
+
+      const totalPaginas = Math.max(1, Math.ceil(filtradas.length / pageSize));
+      pagina = Math.min(pagina, totalPaginas);
+      const desde = (pagina - 1) * pageSize;
+      renderFilas(filtradas.slice(desde, desde + pageSize));
+
+      Amp.renderPagination(document.getElementById(paginacionId), {
+        page: pagina, pageSize: pageSize, total: filtradas.length,
+        onPageChange: p => { pagina = p; aplicarFiltros(); },
+        onPageSizeChange: n => { pageSize = n; pagina = 1; aplicarFiltros(); }
+      });
+    }
+
+    function renderFilas(lista) {
+      const tbody = document.getElementById(tbodyId);
+      tbody.innerHTML = lista.map(n =>
+        '<tr class="fila-nota" data-seller="' + Util.escapeHtml(n.seller) + '" data-id-nota="' + Util.escapeHtml(n.id_nota) + '">' +
+        '<td>' + Util.escapeHtml(n.id_nota) + '</td>' +
+        '<td>' + Util.escapeHtml(n.seller_nombre || n.seller) + '</td>' +
+        '<td>' + Util.escapeHtml(n.periodo || '') + '</td>' +
+        '<td><span class="badge badge-ui">' + Util.escapeHtml(n.estado) + '</span>' +
+        (mostrarLegacy && n.origen === 'legacy' ? ' <span class="badge badge-warning">LEGACY</span>' : '') + '</td>' +
+        '<td>' + Util.formatCLP((n.casos || []).reduce((s, c) => s + (Number(c.monto) || 0), 0)) + '</td>' +
+        '</tr>'
+      ).join('') || '<tr><td colspan="5" class="text-muted" style="text-align:center;padding:24px;">Sin resultados para estos filtros</td></tr>';
+      tbody.querySelectorAll('.fila-nota').forEach(tr => {
+        tr.addEventListener('click', () => onRowClick(tr.dataset.seller, tr.dataset.idNota));
+      });
+    }
+
+    document.getElementById(filtroInputId).addEventListener('input', Util.debounce(() => {
+      pagina = 1;
+      aplicarFiltros();
+    }, 200));
+
+    return {
+      getNotas: () => notas,
+      setNotas(nuevasNotas) {
+        notas = nuevasNotas;
+        actualizarOpcionesFiltros();
+        pagina = 1;
+        aplicarFiltros();
+      }
+    };
+  }
+
+  const listadoCtrl = crearControladorListadoNotas_({
+    tbodyId: 'listado-body', filtroInputId: 'input-filtro-listado',
+    filtroSellersId: 'filtro-sellers-listado', filtroEstadosId: 'filtro-estados-listado',
+    paginacionId: 'listado-paginacion',
+    onRowClick: (seller, idNota) => abrirDetalleNota(seller, idNota),
+    mostrarLegacy: true
+  });
 
   function cargarListado() {
     Amp.renderTableSkeleton(document.getElementById('listado-body'), { cols: 5 });
     const anio = document.getElementById('select-anio').value || new Date().getFullYear();
     Api.get('listarNotas', { anio: anio, sesionAdmin: getSesion() }).then(res => {
       if (!res.ok) { Amp.showToast('No se pudo cargar el listado', 'danger'); return; }
-      notasListado = res.data.sort((a, b) => (b.id_nota || '').localeCompare(a.id_nota || ''));
-      actualizarOpcionesFiltrosListado();
-      listadoPagina = 1;
-      aplicarFiltrosListado();
-    });
-  }
-
-  function actualizarOpcionesFiltrosListado() {
-    const sellersUnicos = Array.from(new Set(notasListado.map(n => n.seller_nombre || n.seller))).sort();
-    const estadosUnicos = Array.from(new Set(notasListado.map(n => n.estado).filter(Boolean))).sort();
-    if (!msSellersListado) {
-      msSellersListado = Amp.multiSelect(document.getElementById('filtro-sellers-listado'), {
-        label: 'Sellers',
-        options: sellersUnicos.map(s => ({ value: s, label: s })),
-        onChange: sel => { listadoFiltros.sellers = sel; listadoPagina = 1; aplicarFiltrosListado(); }
-      });
-      msEstadosListado = Amp.multiSelect(document.getElementById('filtro-estados-listado'), {
-        label: 'Estado',
-        options: estadosUnicos.map(e => ({ value: e, label: e })),
-        onChange: sel => { listadoFiltros.estados = sel; listadoPagina = 1; aplicarFiltrosListado(); }
-      });
-    } else {
-      msSellersListado.setOptions(sellersUnicos.map(s => ({ value: s, label: s })));
-      msEstadosListado.setOptions(estadosUnicos.map(e => ({ value: e, label: e })));
-    }
-  }
-
-  function aplicarFiltrosListado() {
-    const q = document.getElementById('input-filtro-listado').value.toLowerCase();
-    const sellersSet = new Set(listadoFiltros.sellers);
-    const estadosSet = new Set(listadoFiltros.estados);
-    const filtradas = notasListado.filter(n => {
-      const nombreSeller = n.seller_nombre || n.seller || '';
-      if (q && nombreSeller.toLowerCase().indexOf(q) === -1 && (n.id_nota || '').toLowerCase().indexOf(q) === -1) return false;
-      if (sellersSet.size > 0 && !sellersSet.has(nombreSeller)) return false;
-      if (estadosSet.size > 0 && !estadosSet.has(n.estado)) return false;
-      return true;
-    });
-
-    const totalPaginas = Math.max(1, Math.ceil(filtradas.length / listadoPageSize));
-    listadoPagina = Math.min(listadoPagina, totalPaginas);
-    const desde = (listadoPagina - 1) * listadoPageSize;
-    renderListado(filtradas.slice(desde, desde + listadoPageSize));
-
-    Amp.renderPagination(document.getElementById('listado-paginacion'), {
-      page: listadoPagina, pageSize: listadoPageSize, total: filtradas.length,
-      onPageChange: p => { listadoPagina = p; aplicarFiltrosListado(); },
-      onPageSizeChange: n => { listadoPageSize = n; listadoPagina = 1; aplicarFiltrosListado(); }
-    });
-  }
-
-  function renderListado(notas) {
-    const tbody = document.getElementById('listado-body');
-    tbody.innerHTML = notas.map(n =>
-      '<tr class="fila-nota" data-seller="' + Util.escapeHtml(n.seller) + '" data-id-nota="' + Util.escapeHtml(n.id_nota) + '">' +
-      '<td>' + Util.escapeHtml(n.id_nota) + '</td>' +
-      '<td>' + Util.escapeHtml(n.seller_nombre || n.seller) + '</td>' +
-      '<td>' + Util.escapeHtml(n.periodo || '') + '</td>' +
-      '<td><span class="badge badge-ui">' + Util.escapeHtml(n.estado) + '</span>' +
-      (n.origen === 'legacy' ? ' <span class="badge badge-warning">LEGACY</span>' : '') + '</td>' +
-      '<td>' + Util.formatCLP((n.casos || []).reduce((s, c) => s + (Number(c.monto) || 0), 0)) + '</td>' +
-      '</tr>'
-    ).join('') || '<tr><td colspan="5" class="text-muted" style="text-align:center;padding:24px;">Sin resultados para estos filtros</td></tr>';
-    tbody.querySelectorAll('.fila-nota').forEach(tr => {
-      tr.addEventListener('click', () => abrirDetalleNota(tr.dataset.seller, tr.dataset.idNota));
+      listadoCtrl.setNotas(res.data.sort((a, b) => (b.id_nota || '').localeCompare(a.id_nota || '')));
     });
   }
   document.getElementById('select-anio').addEventListener('change', cargarListado);
   document.getElementById('btn-refrescar-listado').addEventListener('click', cargarListado);
-  document.getElementById('input-filtro-listado').addEventListener('input', Util.debounce(() => {
-    listadoPagina = 1;
-    aplicarFiltrosListado();
-  }, 200));
 
   /**
-   * `notasListado` ya trae la Nota completa (viene del índice, que guarda copias completas —
+   * `listadoCtrl` ya trae la Nota completa (viene del índice, que guarda copias completas —
    * ver listarNotasIndice_). Abrir el panel de inmediato con ese dato evita esperar el
    * round-trip de getNotaVerificada (lento en Notas legacy por la reparación de rev que
    * hace esa llamada) — la verificación se dispara igual, pero en segundo plano.
@@ -265,26 +304,30 @@
     return (
       '<div><span class="badge badge-ui">' + Util.escapeHtml(nota.estado) + '</span>' +
       (nota.origen === 'legacy' ? ' <span class="badge badge-warning">LEGACY — importada del sistema anterior</span>' : '') + '</div>' +
-      '<div><div class="field-label">Seller</div>' + Util.escapeHtml(nota.seller_nombre || nota.seller) + '</div>' +
-      '<div><div class="field-label">Período</div>' + Util.escapeHtml(nota.periodo || '') + '</div>' +
-      '<div><div class="field-label">Monto Total</div>' + Util.formatCLP(montoTotal) + '</div>' +
-      '<div><div class="field-label">Fecha generada</div>' + Util.escapeHtml(nota.fecha_generada || '') + '</div>' +
-      (nota.token_expira ? '<div><div class="field-label">Fecha expiración del link</div>' + Util.formatFecha(nota.token_expira) + '</div>' : '') +
-      '<div><div class="field-label">Fecha firma</div>' + Util.escapeHtml(nota.fecha_firma || '—') + '</div>' +
-      (nota.veces_regenerado ? '<div><div class="field-label">Regenerada</div>' + nota.veces_regenerado + ' vez(es) — última: ' + Util.escapeHtml(nota.fecha_ultima_regeneracion || '') + '</div>' : '') +
-      (puedeCopiarLink ? '<div><button class="btn btn-ghost btn-sm js-copy" data-copy="' + Util.escapeHtml(linkAcceso) + '">Copiar link de acceso</button></div>' : '') +
+      '<div class="detalle-grid">' +
+      '<div class="field"><div class="field-label">Seller</div><div>' + Util.escapeHtml(nota.seller_nombre || nota.seller) + '</div></div>' +
+      '<div class="field"><div class="field-label">Período</div><div>' + Util.escapeHtml(nota.periodo || '') + '</div></div>' +
+      '<div class="field"><div class="field-label">Monto Total</div><div class="detalle-monto">' + Util.formatCLP(montoTotal) + '</div></div>' +
+      '<div class="field"><div class="field-label">Fecha generada</div><div>' + Util.escapeHtml(nota.fecha_generada || '') + '</div></div>' +
+      (nota.token_expira ? '<div class="field"><div class="field-label">Fecha expiración del link</div><div>' + Util.formatFecha(nota.token_expira) + '</div></div>' : '') +
+      '<div class="field"><div class="field-label">Fecha firma</div><div>' + Util.escapeHtml(nota.fecha_firma || '—') + '</div></div>' +
+      (nota.veces_regenerado ? '<div class="field" style="grid-column:1/-1;"><div class="field-label">Regenerada</div><div>' + nota.veces_regenerado + ' vez(es) — última: ' + Util.escapeHtml(nota.fecha_ultima_regeneracion || '') + '</div></div>' : '') +
+      '</div>' +
+      '<div class="row" style="gap:8px;">' +
+      (puedeCopiarLink ? '<button class="btn btn-ghost btn-sm js-copy" data-copy="' + Util.escapeHtml(linkAcceso) + '">Copiar link de acceso</button>' : '') +
+      '<button class="btn btn-ghost btn-sm" id="dp-ver-original">Ver Nota de Cobro</button>' +
+      (nota.pdf_firmado_id ? '<button class="btn btn-ghost btn-sm" id="dp-ver-firmado">Ver firmado</button>' : '') +
+      '</div>' +
       '<div class="table-wrap"><table class="table"><thead><tr><th>ID Pedido</th><th>Monto</th></tr></thead><tbody>' +
       (nota.casos || []).map(c => '<tr><td>' + Amp.copyable(c.id_pedido) + '</td><td>' + Util.formatCLP(c.monto) + '</td></tr>').join('') +
-      '</tbody></table></div>' +
-      '<div class="row"><button class="btn btn-ghost btn-sm" id="dp-ver-original">Ver original</button>' +
-      (nota.pdf_firmado_id ? '<button class="btn btn-ghost btn-sm" id="dp-ver-firmado">Ver firmado</button>' : '') + '</div>'
+      '</tbody></table></div>'
     );
   }
 
   function construirDetalleNotaHtml(nota, verificando) {
     const puedeRegenerar = nota.origen !== 'legacy' && ESTADOS_REGENERABLES_.indexOf(nota.estado) !== -1;
     return (
-      '<div class="col" style="gap:14px;">' +
+      '<div class="col" style="gap:var(--sp-5);">' +
       (verificando ? '<div class="row" style="gap:6px;"><span class="amp-spinner sm"></span><span class="text-muted" style="font-size:12px;">Verificando…</span></div>' : '') +
       construirInfoNotaHtml_(nota) +
       '<div class="row" style="gap:8px;">' +
@@ -383,13 +426,13 @@
   function abrirDetalleNota(seller, idNota) {
     const clave = seller + '|' + idNota;
     detalleAbiertoActual = clave;
-    const cacheada = notasListado.find(n => n.seller === seller && n.id_nota === idNota);
+    const cacheada = listadoCtrl.getNotas().find(n => n.seller === seller && n.id_nota === idNota);
 
     if (cacheada) {
-      Amp.openSidePanel({ title: 'Nota N° ' + idNota, html: construirDetalleNotaHtml(cacheada, true) });
+      Amp.openSidePanel({ title: 'Indemnizaciones Caso N° ' + idNota, html: construirDetalleNotaHtml(cacheada, true) });
       bindDetalleNotaHandlers(seller, idNota);
     } else {
-      Amp.openSidePanel({ title: 'Nota N° ' + idNota, html: '<div class="row" style="justify-content:center;padding:40px;"><span class="amp-spinner lg"></span></div>' });
+      Amp.openSidePanel({ title: 'Indemnizaciones Caso N° ' + idNota, html: '<div class="row" style="justify-content:center;padding:40px;"><span class="amp-spinner lg"></span></div>' });
     }
 
     Api.get('getNotaVerificada', { seller: seller, idNota: idNota, sesionAdmin: getSesion() }).then(res => {
@@ -399,7 +442,7 @@
         return;
       }
       const nota = res.data;
-      Amp.openSidePanel({ title: 'Nota N° ' + nota.id_nota, html: construirDetalleNotaHtml(nota, false) });
+      Amp.openSidePanel({ title: 'Indemnizaciones Caso N° ' + nota.id_nota, html: construirDetalleNotaHtml(nota, false) });
       bindDetalleNotaHandlers(seller, idNota);
     });
   }
@@ -780,30 +823,11 @@
   });
 
   // ── Tab: Pruebas (creado dinámicamente, ver crearTabPruebas) ──────────────
-  let notasPrueba = [];
-
   function cargarNotasPrueba() {
     Amp.renderTableSkeleton(document.getElementById('pruebas-body'), { cols: 5 });
     Api.get('listarNotasPrueba', { sesionAdmin: getSesion() }).then(res => {
       if (!res.ok) { Amp.showToast('No se pudo cargar el listado de pruebas', 'danger'); return; }
-      notasPrueba = res.data.sort((a, b) => (b.id_nota || '').localeCompare(a.id_nota || ''));
-      renderNotasPrueba();
-    });
-  }
-
-  function renderNotasPrueba() {
-    const tbody = document.getElementById('pruebas-body');
-    tbody.innerHTML = notasPrueba.map(n =>
-      '<tr class="fila-nota" data-id-nota="' + Util.escapeHtml(n.id_nota) + '">' +
-      '<td>' + Util.escapeHtml(n.id_nota) + '</td>' +
-      '<td>' + Util.escapeHtml(n.seller_nombre || n.seller) + '</td>' +
-      '<td>' + Util.escapeHtml(n.periodo || '') + '</td>' +
-      '<td><span class="badge badge-ui">' + Util.escapeHtml(n.estado) + '</span></td>' +
-      '<td>' + Util.formatCLP((n.casos || []).reduce((s, c) => s + (Number(c.monto) || 0), 0)) + '</td>' +
-      '</tr>'
-    ).join('') || '<tr><td colspan="5" class="text-muted" style="text-align:center;padding:24px;">Sin Notas de prueba generadas todavía</td></tr>';
-    tbody.querySelectorAll('.fila-nota').forEach(tr => {
-      tr.addEventListener('click', () => abrirDetalleNotaPrueba(tr.dataset.idNota));
+      pruebasCtrl.setNotas(res.data.sort((a, b) => (b.id_nota || '').localeCompare(a.id_nota || '')));
     });
   }
 
@@ -814,9 +838,9 @@
    * ni mostrar los botones de enviar/regenerar/marcar pago de construirDetalleNotaHtml.
    */
   function abrirDetalleNotaPrueba(idNota) {
-    const nota = notasPrueba.find(n => n.id_nota === idNota);
+    const nota = pruebasCtrl.getNotas().find(n => n.id_nota === idNota);
     if (!nota) return;
-    Amp.openSidePanel({ title: 'Nota de prueba N° ' + idNota, html: construirInfoNotaHtml_(nota) });
+    Amp.openSidePanel({ title: 'Indemnizaciones Caso N° ' + idNota, html: construirInfoNotaHtml_(nota) });
     bindVerArchivoHandlers_(nota.seller, idNota);
   }
 

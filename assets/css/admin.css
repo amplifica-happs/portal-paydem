@@ -25,3 +25,14 @@
 .seller-row-meta { font-size: var(--fs-xs); margin-top: 2px; }
 .seller-row-toggle { flex-shrink: 0; }
 .seller-row-body { padding: 0 var(--sp-4) var(--sp-4); border-top: 1px solid var(--border); padding-top: var(--sp-3); }
+
+/* ── Side panel de detalle de una Nota: grilla de metadata ───── */
+.detalle-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sp-4) var(--sp-5);
+  padding: var(--sp-4) var(--sp-5);
+  background: var(--bg-inset);
+  border-radius: var(--r-2);
+}
+.detalle-monto { font-size: 18px; font-weight: 700; color: var(--ui); }

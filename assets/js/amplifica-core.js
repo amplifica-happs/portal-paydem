@@ -174,6 +174,17 @@
     document.getElementById('amp-panel').classList.remove('is-open');
   }
 
+  // Esc cierra lo que esté abierto más arriba: el visor de documento (se abre por encima
+  // del side panel, desde una acción dentro de él) primero, y si no está abierto, el side
+  // panel. `index.html` (portal) no tiene side panel, de ahí el null-check.
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    const docViewer = document.getElementById('doc-viewer');
+    if (docViewer && docViewer.classList.contains('is-open')) { closeDocViewer(); return; }
+    const sidePanel = document.getElementById('amp-panel');
+    if (sidePanel && sidePanel.classList.contains('is-open')) { closeSidePanel(); }
+  });
+
   // ─── Visor de documento (drawer) ──────────────────────────
   // Extiende el patrón #pdf-drawer/#pdf-overlay de Proyecto Previo (Facturación)
   // (github/index.html, líneas ~890-950 y ~3798-3852): mismo mecanismo de slide-in
