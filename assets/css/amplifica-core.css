@@ -594,6 +594,14 @@ html[data-theme="dark"] .alert-danger  { color: #fca5a5; }
 }
 @keyframes skel-shimmer { 0% { background-position: 100% 0; } 100% { background-position: -100% 0; } }
 
+.js-copy {
+  cursor: pointer;
+  border-bottom: 1px dashed transparent;
+  transition: color var(--dur-2) linear, border-color var(--dur-2) linear;
+}
+.js-copy:hover { border-bottom-color: currentColor; }
+.js-copy.is-copied { color: var(--success); border-bottom-color: transparent; }
+
 .amp-toploader {
   position: fixed; top: 0; left: 0; right: 0; height: 3px;
   background: transparent; z-index: var(--z-toast); pointer-events: none;

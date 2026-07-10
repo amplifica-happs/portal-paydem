@@ -78,21 +78,70 @@
   document.getElementById('btn-logout').addEventListener('click', () => { clearSesion(); showGate(); });
 
   // ── Tabs ──────────────────────────────────────────────────
-  document.querySelectorAll('.dash-tab').forEach(btn => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('.dash-tab').forEach(b => b.classList.remove('is-active'));
-      btn.classList.add('is-active');
-      document.querySelectorAll('.tab-section').forEach(s => s.classList.add('hidden'));
-      const target = document.getElementById(btn.dataset.tab);
-      target.classList.remove('hidden');
+  function activarTab(btn) {
+    document.querySelectorAll('.dash-tab').forEach(b => b.classList.remove('is-active'));
+    btn.classList.add('is-active');
+    document.querySelectorAll('.tab-section').forEach(s => s.classList.add('hidden'));
+    document.getElementById(btn.dataset.tab).classList.remove('hidden');
 
-      if (!tabsCargados[btn.dataset.tab]) {
-        tabsCargados[btn.dataset.tab] = true;
-        if (btn.dataset.tab === 'tab-generar') { cargarPreview(); cargarProveedoresPdf(); }
-        if (btn.dataset.tab === 'tab-auditoria') cargarAuditoria();
-      }
-    });
+    if (!tabsCargados[btn.dataset.tab]) {
+      tabsCargados[btn.dataset.tab] = true;
+      if (btn.dataset.tab === 'tab-generar') { cargarPreview(); cargarProveedoresPdf(); }
+      if (btn.dataset.tab === 'tab-auditoria') cargarAuditoria();
+      if (btn.dataset.tab === 'tab-pruebas') cargarNotasPrueba();
+    }
+  }
+  function bindTabButton(btn) {
+    btn.addEventListener('click', () => activarTab(btn));
+  }
+  document.querySelectorAll('.dash-tab').forEach(bindTabButton);
+
+  // ── Easter egg: "Listado de Pruebas" — 5 clics seguidos en el logo del navbar.
+  // No se persiste en sessionStorage/localStorage a propósito: al recargar la página
+  // el tab y su contenido dejan de existir hasta repetir el gesto.
+  let clicsLogo = 0;
+  let ultimoClicLogo = 0;
+  let pruebasTabCreada = false;
+
+  document.querySelector('.amp-navbar').addEventListener('click', e => {
+    if (!e.target.closest('.nav-logo')) return;
+    const ahora = Date.now();
+    clicsLogo = (ahora - ultimoClicLogo > 1200) ? 1 : clicsLogo + 1;
+    ultimoClicLogo = ahora;
+    if (clicsLogo >= 5) {
+      clicsLogo = 0;
+      if (!pruebasTabCreada) crearTabPruebas();
+    }
   });
+
+  function crearTabPruebas() {
+    pruebasTabCreada = true;
+
+    const btn = document.createElement('button');
+    btn.className = 'btn dash-tab';
+    btn.dataset.tab = 'tab-pruebas';
+    btn.textContent = 'Pruebas';
+    document.querySelector('.btn-group').appendChild(btn);
+    bindTabButton(btn);
+
+    const section = document.createElement('section');
+    section.id = 'tab-pruebas';
+    section.className = 'tab-section hidden';
+    section.innerHTML =
+      '<div class="row" style="margin-bottom:16px;justify-content:space-between;">' +
+      '<h3 style="margin:0;">Notas de prueba — namespace _pruebas, nunca entran al índice real</h3>' +
+      '<button class="btn btn-ghost btn-sm" id="btn-refrescar-pruebas"><span class="material-symbols-rounded">refresh</span> Refrescar</button>' +
+      '</div>' +
+      '<div class="table-wrap">' +
+      '<table class="table"><thead><tr><th>N° Nota</th><th>Seller</th><th>Período</th><th>Estado</th><th>Monto</th></tr></thead>' +
+      '<tbody id="pruebas-body"></tbody></table>' +
+      '</div>';
+    document.getElementById('view-admin-shell').appendChild(section);
+    document.getElementById('btn-refrescar-pruebas').addEventListener('click', cargarNotasPrueba);
+
+    Amp.showToast('Listado de Pruebas habilitado', 'success');
+    activarTab(btn);
+  }
 
   // ── Tab: Listado ──────────────────────────────────────────
   function poblarSelectAnio(id) {
@@ -116,6 +165,7 @@
   let msEstadosListado = null;
 
   function cargarListado() {
+    Amp.renderTableSkeleton(document.getElementById('listado-body'), { cols: 5 });
     const anio = document.getElementById('select-anio').value || new Date().getFullYear();
     Api.get('listarNotas', { anio: anio, sesionAdmin: getSesion() }).then(res => {
       if (!res.ok) { Amp.showToast('No se pudo cargar el listado', 'danger'); return; }
@@ -203,25 +253,40 @@
 
   const ESTADOS_REGENERABLES_ = ['Generada', 'Enviada', 'Vista', 'Token Expirado'];
 
-  function construirDetalleNotaHtml(nota, verificando) {
+  /**
+   * Bloque de información + tabla de casos, compartido entre el panel de detalle del Listado
+   * (con botones de acción alrededor) y la vista de solo-lectura de "Listado de Pruebas"
+   * (sin botones de acción, sin llamar nunca a getNotaVerificada — ver abrirDetalleNotaPrueba).
+   */
+  function construirInfoNotaHtml_(nota) {
     const montoTotal = (nota.casos || []).reduce((s, c) => s + (Number(c.monto) || 0), 0);
-    const puedeRegenerar = nota.origen !== 'legacy' && ESTADOS_REGENERABLES_.indexOf(nota.estado) !== -1;
+    const puedeCopiarLink = nota.origen !== 'legacy' && !!nota.token && !!nota.token_expira;
+    const linkAcceso = puedeCopiarLink ? (CONFIG.FRONTEND_BASE_URL + '?seller=' + encodeURIComponent(nota.seller) + '&token=' + nota.token) : '';
     return (
-      '<div class="col" style="gap:14px;">' +
-      (verificando ? '<div class="row" style="gap:6px;"><span class="amp-spinner sm"></span><span class="text-muted" style="font-size:12px;">Verificando…</span></div>' : '') +
       '<div><span class="badge badge-ui">' + Util.escapeHtml(nota.estado) + '</span>' +
       (nota.origen === 'legacy' ? ' <span class="badge badge-warning">LEGACY — importada del sistema anterior</span>' : '') + '</div>' +
       '<div><div class="field-label">Seller</div>' + Util.escapeHtml(nota.seller_nombre || nota.seller) + '</div>' +
       '<div><div class="field-label">Período</div>' + Util.escapeHtml(nota.periodo || '') + '</div>' +
       '<div><div class="field-label">Monto Total</div>' + Util.formatCLP(montoTotal) + '</div>' +
       '<div><div class="field-label">Fecha generada</div>' + Util.escapeHtml(nota.fecha_generada || '') + '</div>' +
+      (nota.token_expira ? '<div><div class="field-label">Fecha expiración del link</div>' + Util.formatFecha(nota.token_expira) + '</div>' : '') +
       '<div><div class="field-label">Fecha firma</div>' + Util.escapeHtml(nota.fecha_firma || '—') + '</div>' +
       (nota.veces_regenerado ? '<div><div class="field-label">Regenerada</div>' + nota.veces_regenerado + ' vez(es) — última: ' + Util.escapeHtml(nota.fecha_ultima_regeneracion || '') + '</div>' : '') +
+      (puedeCopiarLink ? '<div><button class="btn btn-ghost btn-sm js-copy" data-copy="' + Util.escapeHtml(linkAcceso) + '">Copiar link de acceso</button></div>' : '') +
       '<div class="table-wrap"><table class="table"><thead><tr><th>ID Pedido</th><th>Monto</th></tr></thead><tbody>' +
-      (nota.casos || []).map(c => '<tr><td>' + Util.escapeHtml(c.id_pedido) + '</td><td>' + Util.formatCLP(c.monto) + '</td></tr>').join('') +
+      (nota.casos || []).map(c => '<tr><td>' + Amp.copyable(c.id_pedido) + '</td><td>' + Util.formatCLP(c.monto) + '</td></tr>').join('') +
       '</tbody></table></div>' +
       '<div class="row"><button class="btn btn-ghost btn-sm" id="dp-ver-original">Ver original</button>' +
-      (nota.pdf_firmado_id ? '<button class="btn btn-ghost btn-sm" id="dp-ver-firmado">Ver firmado</button>' : '') + '</div>' +
+      (nota.pdf_firmado_id ? '<button class="btn btn-ghost btn-sm" id="dp-ver-firmado">Ver firmado</button>' : '') + '</div>'
+    );
+  }
+
+  function construirDetalleNotaHtml(nota, verificando) {
+    const puedeRegenerar = nota.origen !== 'legacy' && ESTADOS_REGENERABLES_.indexOf(nota.estado) !== -1;
+    return (
+      '<div class="col" style="gap:14px;">' +
+      (verificando ? '<div class="row" style="gap:6px;"><span class="amp-spinner sm"></span><span class="text-muted" style="font-size:12px;">Verificando…</span></div>' : '') +
+      construirInfoNotaHtml_(nota) +
       '<div class="row" style="gap:8px;">' +
       (nota.estado === 'Generada' ? '<button class="btn btn-primary btn-sm" id="dp-enviar-pendiente">Enviar por correo</button>' : '') +
       (puedeRegenerar ? '<button class="btn btn-ghost btn-sm" id="dp-regenerar">Regenerar</button>' : '') +
@@ -235,7 +300,7 @@
   }
 
   function construirDiffRegeneracionHtml_(diff) {
-    const filaCaso = (c, signo) => '<tr><td>' + signo + ' ' + Util.escapeHtml(c.id_pedido) + '</td><td>' + Util.formatCLP(c.monto) + '</td></tr>';
+    const filaCaso = (c, signo) => '<tr><td>' + signo + ' ' + Amp.copyable(c.id_pedido) + '</td><td>' + Util.formatCLP(c.monto) + '</td></tr>';
     const sinCambios = diff.agregados.length === 0 && diff.removidos.length === 0;
     return (
       '<div class="alert alert-warning" style="margin-top:12px;">' +
@@ -252,10 +317,14 @@
     );
   }
 
-  function bindDetalleNotaHandlers(seller, idNota) {
+  function bindVerArchivoHandlers_(seller, idNota) {
     document.getElementById('dp-ver-original').addEventListener('click', () => verArchivoAdmin('original', seller, idNota));
     const btnFirmado = document.getElementById('dp-ver-firmado');
     if (btnFirmado) btnFirmado.addEventListener('click', () => verArchivoAdmin('firmado', seller, idNota));
+  }
+
+  function bindDetalleNotaHandlers(seller, idNota) {
+    bindVerArchivoHandlers_(seller, idNota);
     const btnPago = document.getElementById('dp-marcar-pago');
     if (btnPago) btnPago.addEventListener('click', () => {
       const fecha = document.getElementById('dp-fecha-pago').value;
@@ -416,7 +485,7 @@
         '<div class="seller-row-body' + (necesitaAtencion ? '' : ' hidden') + '">' +
         '<div class="text-muted" style="font-size:13px;margin-bottom:8px;">' + Util.escapeHtml(s.banco) + ' · ' + Util.escapeHtml(s.cuenta) + ' · ' + Util.escapeHtml(s.rut) + '</div>' +
         '<div class="table-wrap"><table class="table"><thead><tr><th>ID Pedido</th><th>Monto</th></tr></thead><tbody>' +
-        s.casos.map(c => '<tr><td>' + Util.escapeHtml(c.idPedido) + '</td><td>' + Util.formatCLP(c.monto) + '</td></tr>').join('') +
+        s.casos.map(c => '<tr><td>' + Amp.copyable(c.idPedido) + '</td><td>' + Util.formatCLP(c.monto) + '</td></tr>').join('') +
         '</tbody></table></div>' +
         '<div class="seller-row-result"></div>' +
         '</div>';
@@ -502,6 +571,9 @@
   const auditoriaPageSize = { bloqueado: 20, pendiente: 20, procesado: 20 };
 
   function cargarAuditoria() {
+    Amp.renderTableSkeleton(document.getElementById('auditoria-bloqueado-body'), { cols: 5 });
+    Amp.renderTableSkeleton(document.getElementById('auditoria-pendiente-body'), { cols: 4 });
+    Amp.renderTableSkeleton(document.getElementById('auditoria-procesado-body'), { cols: 3 });
     Api.get('listarCasosNoElegibles', { sesionAdmin: getSesion() }).then(res => {
       if (!res.ok) { Amp.showToast('No se pudo cargar la auditoría', 'danger'); return; }
       auditoriaData = res.data;
@@ -556,7 +628,7 @@
     renderTablaAuditoriaPaginada_({
       lista: auditoriaData.bloqueado, tbodyId: 'auditoria-bloqueado-body', paginacionId: 'auditoria-bloqueado-paginacion',
       pageKey: 'bloqueado', colspan: 5,
-      filaHtml: f => '<tr><td>' + f.fila + '</td><td>' + Util.escapeHtml(f.seller) + '</td><td>' + Util.escapeHtml(f.idPedido) + '</td>' +
+      filaHtml: f => '<tr><td>' + f.fila + '</td><td>' + Util.escapeHtml(f.seller) + '</td><td>' + Amp.copyable(f.idPedido) + '</td>' +
         '<td><span class="badge badge-danger">' + Util.escapeHtml(f.motivo) + '</span></td>' +
         '<td><a class="btn btn-link btn-sm" href="' + f.link + '" target="_blank" rel="noopener">Ver en Sheet</a></td></tr>',
       vacioHtml: 'Sin casos bloqueados 🎉'
@@ -564,13 +636,13 @@
     renderTablaAuditoriaPaginada_({
       lista: auditoriaData.pendienteAprobacion, tbodyId: 'auditoria-pendiente-body', paginacionId: 'auditoria-pendiente-paginacion',
       pageKey: 'pendiente', colspan: 4,
-      filaHtml: f => '<tr><td>' + f.fila + '</td><td>' + Util.escapeHtml(f.seller) + '</td><td>' + Util.escapeHtml(f.idPedido) + '</td><td>' + Util.escapeHtml(f.estado) + '</td></tr>',
+      filaHtml: f => '<tr><td>' + f.fila + '</td><td>' + Util.escapeHtml(f.seller) + '</td><td>' + Amp.copyable(f.idPedido) + '</td><td>' + Util.escapeHtml(f.estado) + '</td></tr>',
       vacioHtml: 'Sin casos pendientes'
     });
     renderTablaAuditoriaPaginada_({
       lista: auditoriaData.yaProcesado, tbodyId: 'auditoria-procesado-body', paginacionId: 'auditoria-procesado-paginacion',
       pageKey: 'procesado', colspan: 3,
-      filaHtml: f => '<tr><td>' + f.fila + '</td><td>' + Util.escapeHtml(f.seller) + '</td><td>' + Util.escapeHtml(f.idPedido) + '</td></tr>',
+      filaHtml: f => '<tr><td>' + f.fila + '</td><td>' + Util.escapeHtml(f.seller) + '</td><td>' + Amp.copyable(f.idPedido) + '</td></tr>',
       vacioHtml: 'Sin casos procesados'
     });
   }
@@ -706,6 +778,47 @@
       procesarSiguiente();
     });
   });
+
+  // ── Tab: Pruebas (creado dinámicamente, ver crearTabPruebas) ──────────────
+  let notasPrueba = [];
+
+  function cargarNotasPrueba() {
+    Amp.renderTableSkeleton(document.getElementById('pruebas-body'), { cols: 5 });
+    Api.get('listarNotasPrueba', { sesionAdmin: getSesion() }).then(res => {
+      if (!res.ok) { Amp.showToast('No se pudo cargar el listado de pruebas', 'danger'); return; }
+      notasPrueba = res.data.sort((a, b) => (b.id_nota || '').localeCompare(a.id_nota || ''));
+      renderNotasPrueba();
+    });
+  }
+
+  function renderNotasPrueba() {
+    const tbody = document.getElementById('pruebas-body');
+    tbody.innerHTML = notasPrueba.map(n =>
+      '<tr class="fila-nota" data-id-nota="' + Util.escapeHtml(n.id_nota) + '">' +
+      '<td>' + Util.escapeHtml(n.id_nota) + '</td>' +
+      '<td>' + Util.escapeHtml(n.seller_nombre || n.seller) + '</td>' +
+      '<td>' + Util.escapeHtml(n.periodo || '') + '</td>' +
+      '<td><span class="badge badge-ui">' + Util.escapeHtml(n.estado) + '</span></td>' +
+      '<td>' + Util.formatCLP((n.casos || []).reduce((s, c) => s + (Number(c.monto) || 0), 0)) + '</td>' +
+      '</tr>'
+    ).join('') || '<tr><td colspan="5" class="text-muted" style="text-align:center;padding:24px;">Sin Notas de prueba generadas todavía</td></tr>';
+    tbody.querySelectorAll('.fila-nota').forEach(tr => {
+      tr.addEventListener('click', () => abrirDetalleNotaPrueba(tr.dataset.idNota));
+    });
+  }
+
+  /**
+   * Solo lectura a propósito: pinta directo el dato ya cargado, sin llamar nunca a
+   * getNotaVerificada (para storageKey '_pruebas' esa función terminaría escribiendo la
+   * Nota de prueba en el índice REAL, rompiendo el aislamiento — ver TrackingService.gs)
+   * ni mostrar los botones de enviar/regenerar/marcar pago de construirDetalleNotaHtml.
+   */
+  function abrirDetalleNotaPrueba(idNota) {
+    const nota = notasPrueba.find(n => n.id_nota === idNota);
+    if (!nota) return;
+    Amp.openSidePanel({ title: 'Nota de prueba N° ' + idNota, html: construirInfoNotaHtml_(nota) });
+    bindVerArchivoHandlers_(nota.seller, idNota);
+  }
 
   // ── Boot ──────────────────────────────────────────────────
   if (getSesion()) showShell(); else showGate();

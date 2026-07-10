@@ -329,6 +329,36 @@
     };
   }
 
+  // ─── Table loading skeleton ────────────────────────────────
+  /** Pinta `rows` filas de placeholders shimmer en un <tbody> mientras un fetch está en vuelo. */
+  function renderTableSkeleton(tbodyEl, { cols, rows = 6 } = {}) {
+    tbodyEl.innerHTML = Array.from({ length: rows }, () =>
+      '<tr>' + Array.from({ length: cols }, () => '<td><span class="skel">&nbsp;</span></td>').join('') + '</tr>'
+    ).join('');
+  }
+
+  // ─── Copiar al portapapeles (click-to-copy) ────────────────
+  /** Envuelve `value` en un span clickeable — aplica a cualquier código de pedido mostrado en la UI. */
+  function copyable(value) {
+    const esc = escLocal(value);
+    return '<span class="js-copy" data-copy="' + esc + '" title="Clic para copiar">' + esc + '</span>';
+  }
+  document.addEventListener('click', e => {
+    const el = e.target.closest('.js-copy');
+    if (!el || !navigator.clipboard) return;
+    const valor = el.dataset.copy;
+    navigator.clipboard.writeText(valor).then(() => {
+      if (el._copyTimeout) clearTimeout(el._copyTimeout);
+      if (el._copyOriginal === undefined) el._copyOriginal = el.textContent;
+      el.classList.add('is-copied');
+      el.textContent = '✓ Copiado';
+      el._copyTimeout = setTimeout(() => {
+        el.classList.remove('is-copied');
+        el.textContent = el._copyOriginal;
+      }, 900);
+    });
+  });
+
   // ─── Pagination bar ────────────────────────────────────────
   /** Barra "Mostrar N · X–Y de Z · « ‹ page › »" — se pinta siempre dentro del .table-wrap. */
   function renderPagination(containerEl, opts = {}) {
@@ -382,5 +412,6 @@
     openSidePanel, closeSidePanel,
     openDocViewerLoading, renderDocViewerContent, showDocViewerError, closeDocViewer,
     multiSelect, renderPagination,
+    renderTableSkeleton, copyable,
   };
 })(window);

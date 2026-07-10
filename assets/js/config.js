@@ -5,6 +5,10 @@
 const CONFIG = {
   BACKEND_URL: 'https://script.google.com/macros/s/AKfycbwc8SBwwrWql_mVPkhXAx18VNubGh-0p6Mb3blhBZ7ZxHKE7SROIuqtKU0ggyV61MaY/exec',
 
+  // Debe ser el mismo valor que Config.gs -> FRONTEND_BASE_URL en el backend — se usa para
+  // armar client-side el mismo link de acceso que el correo (ver AdminHandlers/EmailService).
+  FRONTEND_BASE_URL: 'https://amplifica-happs.github.io/portal-paydem/',
+
   // Client ID de Google Sign-In (admin.html) — no es secreto, está pensado para ir acá.
   // Debe ser EXACTAMENTE el mismo valor que Config.gs -> GOOGLE_OAUTH_CLIENT_ID en el backend.
   GOOGLE_CLIENT_ID: '1016068082793-94bpm24ghq6dnobqaq6bubniict8f38m.apps.googleusercontent.com',

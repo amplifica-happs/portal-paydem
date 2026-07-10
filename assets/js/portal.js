@@ -47,7 +47,7 @@
 
     const tbody = document.getElementById('nota-casos-body');
     tbody.innerHTML = (nota.casos || []).map(c =>
-      '<tr><td>' + Util.escapeHtml(c.id_pedido) + '</td><td>' + Util.formatCLP(c.monto) +
+      '<tr><td>' + Amp.copyable(c.id_pedido) + '</td><td>' + Util.formatCLP(c.monto) +
       '</td><td>' + Util.escapeHtml(c.responsable || '') + '</td></tr>'
     ).join('');
 
@@ -133,7 +133,7 @@
         '<div class="historial-detalle hidden">' +
         '  <div class="table-wrap" style="margin:12px 0;">' +
         '    <table class="table"><thead><tr><th>ID Pedido</th><th>Monto</th></tr></thead>' +
-        '    <tbody>' + (nota.casos || []).map(c => '<tr><td>' + Util.escapeHtml(c.id_pedido) + '</td><td>' + Util.formatCLP(c.monto) + '</td></tr>').join('') + '</tbody></table>' +
+        '    <tbody>' + (nota.casos || []).map(c => '<tr><td>' + Amp.copyable(c.id_pedido) + '</td><td>' + Util.formatCLP(c.monto) + '</td></tr>').join('') + '</tbody></table>' +
         '  </div>' +
         '  <div class="row">' +
         '    <button class="btn btn-ghost btn-sm btn-ver-original">Ver original</button>' +
