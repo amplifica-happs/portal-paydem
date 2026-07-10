@@ -92,6 +92,10 @@
 
   /* z */
   --z-raised: 10; --z-sticky: 60; --z-overlay: 100; --z-modal: 200; --z-toast: 300;
+
+  /* Altura real de .amp-navbar, medida en JS (ver actualizarOffsetSticky en amplifica-core.js) —
+     usada para que los headers de tabla sticky se peguen debajo del navbar, no debajo de él. */
+  --sticky-offset: 0px;
 }
 
 /* ────────────────────────────────────────────────────────────
@@ -511,7 +515,14 @@ html[data-theme="dark"] .alert-danger  { color: #fca5a5; }
   font-family: var(--font-display); font-weight: 700; font-size: 13px;
   text-transform: uppercase; letter-spacing: 0.08em;
   border: 0;
+  /* Se queda visible mientras se hace scroll de la tabla — .table-wrap recorta con
+     overflow:hidden pero sin alto fijo, así que actúa como el límite natural del sticky
+     (se pega al entrar la tabla en viewport, se libera al salir). Offset 0 por defecto
+     porque estas tablas viven dentro de overlays (side panel/visor) que no tienen navbar
+     encima; `.container .table th` (abajo) sube el offset para las tablas de página. */
+  position: sticky; top: 0; z-index: var(--z-raised);
 }
+.container .table th { top: var(--sticky-offset); }
 .table td {
   padding: 10px 14px;
   border-top: 1px solid var(--border);

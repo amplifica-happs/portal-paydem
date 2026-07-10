@@ -34,6 +34,17 @@
     });
   })();
 
+  // ─── Sticky table headers — offset real del navbar ───────
+  // .amp-navbar también es sticky top:0 — los <th> sticky (amplifica-core.css) necesitan
+  // pegarse debajo de él, no debajo. Se mide en JS en vez de hardcodear un px porque el alto
+  // real depende de tipografía/logo — se recalcula si la ventana cambia de tamaño.
+  function actualizarOffsetSticky() {
+    const nav = document.querySelector('.amp-navbar');
+    document.documentElement.style.setProperty('--sticky-offset', (nav ? nav.offsetHeight : 0) + 'px');
+  }
+  actualizarOffsetSticky(); // este script va al final de <body> sin defer — el navbar ya existe
+  window.addEventListener('resize', actualizarOffsetSticky);
+
   // ─── Toasts ───────────────────────────────────────────────
   function ensureToastRoot() {
     let root = document.getElementById('amp-toasts');

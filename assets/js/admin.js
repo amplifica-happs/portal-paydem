@@ -840,7 +840,7 @@
   function abrirDetalleNotaPrueba(idNota) {
     const nota = pruebasCtrl.getNotas().find(n => n.id_nota === idNota);
     if (!nota) return;
-    Amp.openSidePanel({ title: 'Indemnizaciones Caso N° ' + idNota, html: construirInfoNotaHtml_(nota) });
+    Amp.openSidePanel({ title: 'Indemnizaciones Caso N° ' + idNota, html: '<div class="col" style="gap:var(--sp-5);">' + construirInfoNotaHtml_(nota) + '</div>' });
     bindVerArchivoHandlers_(nota.seller, idNota);
   }
 
