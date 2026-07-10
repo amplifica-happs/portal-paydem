@@ -176,7 +176,7 @@
   // ─── Side panel ──────────────────────────────────────────
   function openSidePanel({ title = 'Detalles', html = '' } = {}) {
     document.getElementById('amp-panel-title').textContent = title;
-    document.getElementById('amp-panel-body').innerHTML = html;
+    document.getElementById('amp-panel-body').innerHTML = '<div class="amp-panel-body-inner">' + html + '</div>';
     document.getElementById('amp-panel-backdrop').classList.add('is-open');
     document.getElementById('amp-panel').classList.add('is-open');
   }
