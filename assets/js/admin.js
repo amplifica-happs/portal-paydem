@@ -349,7 +349,7 @@
       '<div class="alert alert-warning" style="margin-top:12px;">' +
       '<div style="margin-bottom:8px;">Monto anterior: ' + Util.escapeHtml(diff.montoAnterior) + ' → Monto nuevo: ' + Util.escapeHtml(diff.montoNuevo) + '</div>' +
       (sinCambios ? '<div class="text-muted">Sin cambios en los casos — solo se reconstruye el PDF.</div>' :
-        '<div class="table-wrap"><table class="table"><tbody>' +
+        '<div class="table-wrap"><table class="table table-noheader"><tbody>' +
         diff.agregados.map(c => filaCaso(c, '+')).join('') +
         diff.removidos.map(c => filaCaso(c, '−')).join('') +
         '</tbody></table></div>') +
